@@ -1,0 +1,51 @@
+name: Build macOS app
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set version
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build universal app
+        run: UNIVERSAL=1 ./build-app.sh
+
+      - name: Package DMG and ZIP
+        run: |
+          mkdir -p out dmg
+          cp -R "dist/Mi Remote.app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "Mi Remote" -srcfolder dmg -ov -format UDZO "out/Mi-Remote-$VERSION.dmg"
+          ditto -c -k --keepParent "dist/Mi Remote.app" "out/Mi-Remote-$VERSION.zip"
+          lipo -info "dist/Mi Remote.app/Contents/MacOS/MiRemote"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mi-Remote-${{ env.VERSION }}
+          path: out/*
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" out/* \
+            --title "Mi Remote $VERSION" \
+            --generate-notes
