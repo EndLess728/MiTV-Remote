@@ -2,7 +2,7 @@
 
 A native SwiftUI menu bar app. Click the remote icon in the menu bar to open the remote; click away to close it. It has no Dock icon; right-click the menu bar icon and choose **Quit Mi Remote** to quit.
 
-See the [main README](../../README.md) for installation and how the protocol works.
+Tested on a Xiaomi Mi TV `MiTV-AXSO0`; see [Compatibility](../../README.md#compatibility) for other models. See the [main README](../../README.md) for installation and how the protocol works.
 
 ## Keyboard shortcuts
 
