@@ -4,6 +4,10 @@ A native macOS menu bar remote for Xiaomi Mi TV (Android TV / PatchWall). Click 
 
 The TV's control protocol isn't documented, so it was **reverse engineered with [REA (Reverse Engineer Anything)](https://github.com/morluto/rea)** from the TV's own firmware (see [How it was reverse engineered](#how-it-was-reverse-engineered)).
 
+![Mi Remote opened from the Mac menu bar controlling a Mi TV](docs/demo.gif)
+
+*Left: the remote opened from the Mac menu bar. Right: the TV screen, recorded at the same time over ADB. Shown: Home, D-pad navigation, volume up and down, and keyboard arrows.* [Watch the MP4](docs/demo.mp4)
+
 > Not affiliated with or endorsed by Xiaomi. "Mi" and "Xiaomi" are trademarks of their respective owners.
 
 ## Features
