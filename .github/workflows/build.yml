@@ -75,7 +75,6 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
       APP_ENV: production
       EXPO_PUBLIC_APP_ENV: production
-      NODE_ENV: production
     steps:
       - uses: actions/checkout@v4
 
@@ -102,8 +101,12 @@ jobs:
       - name: Generate native project
         run: npx expo prebuild --platform android --no-install
 
+      # NODE_ENV only here, where the JS is bundled: set job-wide, it would make
+      # `yarn install` skip devDependencies such as tsx, which app.config.ts needs.
       - name: Build release APK
         working-directory: apps/mobile/android
+        env:
+          NODE_ENV: production
         run: ./gradlew assembleRelease --no-daemon
 
       - name: Collect APK
@@ -126,7 +129,6 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
       APP_ENV: production
       EXPO_PUBLIC_APP_ENV: production
-      NODE_ENV: production
     steps:
       - uses: actions/checkout@v4
 
@@ -158,6 +160,8 @@ jobs:
       # user's own (free) Apple ID when installing it.
       - name: Build unsigned archive
         working-directory: apps/mobile/ios
+        env:
+          NODE_ENV: production
         run: |
           set -o pipefail
           xcodebuild archive \
