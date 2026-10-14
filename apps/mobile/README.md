@@ -2,7 +2,7 @@
 
 A React Native (Expo) remote for Xiaomi Mi TV, built from [React-Native-Expo-Boilterplate](https://github.com/EndLess728/React-Native-Expo-Boilterplate) (Expo Router, Unistyles, Zustand + MMKV, i18n, ESLint, Husky).
 
-See the [main README](../../README.md) for installation (including iPhone sideloading) and how the protocol works.
+Tested on a Xiaomi Mi TV `MiTV-AXSO0`; see [Compatibility](../../README.md#compatibility) for other models. See the [main README](../../README.md) for installation (including iPhone sideloading) and how the protocol works.
 
 ## Develop
 

@@ -27,10 +27,28 @@ All three implement the same protocol and features:
 - **Full remote layout**: power, input source, recent apps, TV settings, D-pad and OK, back, home, menu, volume, mute, search, channel up and down, and media controls.
 - **Hold to repeat** on the D-pad, volume and channel keys.
 - **Type on the TV**: send text to search boxes and login fields.
-- **Auto-discovery** of Mi TVs on the network, or enter the IP address by hand.
+- **Auto-discovery** of Mi TVs on the network, or enter the IP address by hand. See [Compatibility](#compatibility) for supported models.
 - **Auto-reconnect**, with heartbeats and a live latency readout.
 - **macOS**: lives in the menu bar and has keyboard shortcuts ([list](apps/macos/README.md#keyboard-shortcuts)).
 - **Mobile**: haptic feedback, and the remote reconnects when you return to the app.
+
+## Compatibility
+
+| TV | Status |
+|---|---|
+| **Xiaomi Mi TV `MiTV-AXSO0`** (Android TV 9, PatchWall) | ✅ Tested with the macOS app. The mobile apps use the same protocol and have so far been tested against a mock TV |
+| Other Mi TVs on Android TV with PatchWall | Expected to work, not tested |
+| Xiaomi TVs on Google TV | Unknown; may not include the MiLink service |
+
+The apps don't depend on a specific model. They need the TV to run Xiaomi's **MiLink** service (`com.mitv.milinkservice`), which listens on **TCP port 6091**; it's the same service Xiaomi's own phone remote apps use. Any TV with that service should work.
+
+**Check your TV** (it must be on the same Wi-Fi as your computer):
+
+```sh
+nc -z -w 3 <tv-ip> 6091 && echo "MiLink found: Mi Remote should work"
+```
+
+Find the TV's IP under **Settings → Network → Wi-Fi** on the TV. If the port is closed, the TV doesn't run MiLink and these apps can't control it. If you try a model not listed here, please open an issue with the model (usually under **Settings → Device Preferences → About**) and whether it worked, so the table can grow.
 
 ## Install
 
