@@ -1,0 +1,8 @@
+{
+  "name": "milink",
+  "version": "1.0.0",
+  "description": "TCP socket and Mi TV discovery for the MiLink remote protocol",
+  "main": "index.ts",
+  "license": "MIT",
+  "private": true
+}

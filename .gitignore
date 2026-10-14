@@ -1,6 +1,12 @@
+# macOS app (apps/macos)
 .build/
 dist/
 .swiftpm/
 *.xcodeproj/
 xcuserdata/
+
+# Tooling
+.code-review-graph/
 .DS_Store
+
+# The mobile app has its own .gitignore in apps/mobile

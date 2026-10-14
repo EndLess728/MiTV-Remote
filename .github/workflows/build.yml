@@ -1,4 +1,10 @@
-name: Build macOS app
+name: Build
+
+# Builds every app in the monorepo:
+#   macOS    apps/macos   universal .app → DMG + ZIP
+#   Android  apps/mobile  release APK (installable, signed with the debug key)
+#   iOS      apps/mobile  unsigned IPA, for sideloading with AltStore / SideStore / Sideloadly
+# Pushing a v* tag also publishes a GitHub Release with all of them attached.
 
 on:
   push:
@@ -10,21 +16,37 @@ on:
 permissions:
   contents: write
 
-jobs:
-  build:
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # full history and tags, for the release changelog
+env:
+  BUILD_NUMBER: ${{ github.run_number }}
 
-      - name: Set version
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      app-version: ${{ steps.v.outputs.app-version }}
+    steps:
+      - id: v
         run: |
           if [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+            echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+            echo "app-version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           else
-            echo "VERSION=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_ENV"
+            echo "version=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+            # iOS requires a numeric version, so untagged builds keep package.json's.
+            echo "app-version=" >> "$GITHUB_OUTPUT"
           fi
+
+  macos:
+    needs: version
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: apps/macos
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Build universal app
         run: UNIVERSAL=1 ./build-app.sh
@@ -34,38 +56,178 @@ jobs:
           mkdir -p out dmg
           cp -R "dist/Mi Remote.app" dmg/
           ln -s /Applications dmg/Applications
-          hdiutil create -volname "Mi Remote" -srcfolder dmg -ov -format UDZO "out/Mi-Remote-$VERSION.dmg"
-          ditto -c -k --keepParent "dist/Mi Remote.app" "out/Mi-Remote-$VERSION.zip"
+          hdiutil create -volname "Mi Remote" -srcfolder dmg -ov -format UDZO "out/Mi-Remote-$VERSION-macOS.dmg"
+          ditto -c -k --keepParent "dist/Mi Remote.app" "out/Mi-Remote-$VERSION-macOS.zip"
           lipo -info "dist/Mi Remote.app/Contents/MacOS/MiRemote"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: Mi-Remote-${{ env.VERSION }}
-          path: out/*
+          name: macos
+          path: apps/macos/out/*
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      APP_ENV: production
+      EXPO_PUBLIC_APP_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: apps/mobile/yarn.lock
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: zulu
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Set app version
+        if: needs.version.outputs.app-version != ''
+        run: npm pkg set version=${{ needs.version.outputs.app-version }}
+
+      - name: Generate native project
+        run: npx expo prebuild --platform android --no-install
+
+      # NODE_ENV only here, where the JS is bundled: set job-wide, it would make
+      # `yarn install` skip devDependencies such as tsx, which app.config.ts needs.
+      - name: Build release APK
+        working-directory: apps/mobile/android
+        env:
+          NODE_ENV: production
+        run: ./gradlew assembleRelease --no-daemon
+
+      - name: Collect APK
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/release/app-release.apk "out/Mi-Remote-$VERSION-android.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: apps/mobile/out/*
+
+  ios:
+    needs: version
+    runs-on: macos-26
+    defaults:
+      run:
+        working-directory: apps/mobile
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      APP_ENV: production
+      EXPO_PUBLIC_APP_ENV: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: yarn
+          cache-dependency-path: apps/mobile/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Set app version
+        if: needs.version.outputs.app-version != ''
+        run: npm pkg set version=${{ needs.version.outputs.app-version }}
+
+      - name: Generate native project
+        run: npx expo prebuild --platform ios --no-install
+
+      - name: Install pods
+        working-directory: apps/mobile/ios
+        run: pod install
+
+      # No Apple Developer account: build unsigned. Sideloading tools re-sign the app with the
+      # user's own (free) Apple ID when installing it.
+      - name: Build unsigned archive
+        working-directory: apps/mobile/ios
+        env:
+          NODE_ENV: production
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -workspace MiRemote.xcworkspace \
+            -scheme MiRemote \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/MiRemote.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            | tee "$RUNNER_TEMP/xcodebuild.log" | grep -E '^(\*\*|error:|.*: error:)' || true
+          test -d "$RUNNER_TEMP/MiRemote.xcarchive/Products/Applications/MiRemote.app"
+
+      - name: Package IPA
+        run: |
+          mkdir -p out "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/MiRemote.xcarchive/Products/Applications/MiRemote.app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry "$GITHUB_WORKSPACE/apps/mobile/out/Mi-Remote-$VERSION-ios-unsigned.ipa" Payload)
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: ios-build-log
+          path: ${{ runner.temp }}/xcodebuild.log
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: apps/mobile/out/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [version, macos, android, ios]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history and tags, for the release changelog
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
 
       - name: Write release notes
-        if: startsWith(github.ref, 'refs/tags/v')
         run: |
           PREV=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
           RANGE=${PREV:+$PREV..}$GITHUB_REF_NAME
           {
             echo "## Download"
             echo
-            echo "- **Mi-Remote-$VERSION.dmg**: open it and drag **Mi Remote** to Applications"
-            echo "- **Mi-Remote-$VERSION.zip**: the same app, zipped"
-            echo
-            echo "Universal app (Apple Silicon and Intel), macOS 14 Sonoma or later."
+            echo "| Platform | File | How to install |"
+            echo "|---|---|---|"
+            echo "| macOS 14+ | \`Mi-Remote-$VERSION-macOS.dmg\` | Open it and drag **Mi Remote** to Applications |"
+            echo "| Android 7+ | \`Mi-Remote-$VERSION-android.apk\` | Open it on the phone and allow installing from this source |"
+            echo "| iPhone (iOS 16.4+) | \`Mi-Remote-$VERSION-ios-unsigned.ipa\` | Sideload with AltStore, SideStore or Sideloadly using your Apple ID |"
             echo
             echo "## First launch"
             echo
-            echo "The app is not notarized, so macOS blocks it the first time. Open it once, then go to"
-            echo "**System Settings → Privacy & Security** and click **Open Anyway**. Or run:"
+            echo "- **macOS**: the app is not notarized. Open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**."
+            echo "- **All platforms**: allow **Local Network** access when asked; the app needs it to find and reach the TV."
+            echo "- **iPhone**: apps sideloaded with a free Apple ID expire after 7 days; refresh them in AltStore/SideStore, or reinstall."
             echo
-            echo '```sh'
-            echo 'xattr -dr com.apple.quarantine "/Applications/Mi Remote.app"'
-            echo '```'
-            echo
-            echo "Allow **Local Network** access when asked, then click the remote icon in the menu bar."
+            echo "See the [README](https://github.com/$GITHUB_REPOSITORY#install) for step-by-step instructions."
             echo
             echo "## Changes"
             echo
@@ -78,9 +240,9 @@ jobs:
             fi
           } > notes.md
           cat notes.md
+          ls -la out
 
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |

@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["MiLinkModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.milink.MiLinkModule"]
+  }
+}
