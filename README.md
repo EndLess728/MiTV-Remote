@@ -1,83 +1,103 @@
-# Mi TV Remote for Mac
+# Mi TV Remote
 
-A native macOS menu bar remote for Xiaomi Mi TV (Android TV / PatchWall). Click the remote icon in the menu bar and control your TV from your Mac over Wi-Fi: no phone, no pairing, no ADB.
+Remote control apps for Xiaomi Mi TV (Android TV / PatchWall) on **macOS**, **Android** and **iOS**. They control the TV over Wi-Fi with no pairing and no ADB, using the TV's built-in MiLink remote service.
 
-The TV's control protocol isn't documented, so it was **reverse engineered with [REA (Reverse Engineer Anything)](https://github.com/morluto/rea)** from the TV's own firmware (see [How it was reverse engineered](#how-it-was-reverse-engineered)).
+That service's protocol isn't documented, so it was **reverse engineered with [REA (Reverse Engineer Anything)](https://github.com/morluto/rea)** from the TV's own firmware (see [How it was reverse engineered](#how-it-was-reverse-engineered)).
 
 ![Mi Remote opened from the Mac menu bar controlling a Mi TV](docs/demo.gif)
 
-*Left: the remote opened from the Mac menu bar. Right: the TV screen, recorded at the same time over ADB. Shown: Home, D-pad navigation, volume up and down, and keyboard arrows.* [Watch the MP4](docs/demo.mp4)
+*The macOS app opened from the menu bar (left) and the TV screen, recorded at the same time over ADB (right).* [Watch the MP4](docs/demo.mp4)
 
 > Not affiliated with or endorsed by Xiaomi. "Mi" and "Xiaomi" are trademarks of their respective owners.
 
-## Features
+## Apps
 
-- **Menu bar app**: lives in the top-right menu bar; click the icon to open the remote, click away to close it. No Dock icon.
-- **Full remote layout**: power, input source, D-pad and OK, back, home, menu, volume, mute, search, channel up and down, and media controls.
-- **Hold to repeat** on the D-pad and volume and channel rockers.
-- **Type on the TV**: send text to search boxes and login fields from your Mac keyboard.
-- **Keyboard control** while the remote is open (see below).
-- **Auto-discovery**: finds Mi TVs on your network over Bonjour, or you can enter the IP address by hand.
-- **Auto-reconnect**: keeps the connection alive with heartbeats and reconnects if the TV restarts.
-- Universal app for Apple Silicon and Intel Macs, macOS 14 Sonoma or later.
+| App | Folder | Built with | Output |
+|---|---|---|---|
+| macOS | [`apps/macos`](apps/macos) | Swift, SwiftUI, Network framework | Menu bar app (universal DMG) |
+| Android | [`apps/mobile`](apps/mobile) | React Native (Expo), Kotlin native module | APK |
+| iOS | [`apps/mobile`](apps/mobile) | React Native (Expo), Swift native module | Unsigned IPA for sideloading |
 
-### Keyboard shortcuts
+![Mi Remote on iPhone and Android](docs/mobile.png)
 
-| Key | Action |
-|---|---|
-| Arrow keys | D-pad |
-| Return | OK |
-| Esc / Delete | Back |
-| Space | Play / Pause |
-| H | Home |
-| M | Menu |
-| P | Power |
-| + / − | Volume up / down |
-| 0 | Mute |
-| / or T | Focus the "Type on TV" box |
+*The iOS app (left: remote and TV picker) and the Android app (right), in the simulator and emulator, connected to a mock MiLink TV.*
+
+All three implement the same protocol and features:
+
+- **Full remote layout**: power, input source, recent apps, TV settings, D-pad and OK, back, home, menu, volume, mute, search, channel up and down, and media controls.
+- **Hold to repeat** on the D-pad, volume and channel keys.
+- **Type on the TV**: send text to search boxes and login fields.
+- **Auto-discovery** of Mi TVs on the network, or enter the IP address by hand.
+- **Auto-reconnect**, with heartbeats and a live latency readout.
+- **macOS**: lives in the menu bar and has keyboard shortcuts ([list](apps/macos/README.md#keyboard-shortcuts)).
+- **Mobile**: haptic feedback, and the remote reconnects when you return to the app.
 
 ## Install
 
-1. Download the latest `Mi-Remote-x.y.z.dmg` from [**Releases**](../../releases).
-2. Open the DMG and drag **Mi Remote** to **Applications**.
-3. The app is not notarized by Apple, so macOS blocks it the first time you open it:
-   - Open it once. When macOS says it can't be verified, click **Done**.
-   - Go to **System Settings → Privacy & Security**, scroll down, and click **Open Anyway** next to "Mi Remote".
+Download the files from the latest [**Release**](../../releases/latest).
 
-   Or remove the quarantine flag from Terminal:
+### macOS (14 Sonoma or later)
+
+1. Open `Mi-Remote-x.y.z-macOS.dmg` and drag **Mi Remote** to **Applications**.
+2. The app is not notarized by Apple, so macOS blocks it the first time. Open it once, click **Done**, then go to **System Settings → Privacy & Security** and click **Open Anyway**. Or run:
    ```sh
    xattr -dr com.apple.quarantine "/Applications/Mi Remote.app"
    ```
-4. Allow **Local Network** access when asked. The app needs it to find and talk to the TV.
-5. Click the remote icon in the menu bar. If one Mi TV is found it connects automatically; otherwise pick your TV or type its IP address.
+3. Allow **Local Network** access, then click the remote icon in the menu bar.
 
-To quit, right-click the menu bar icon and choose **Quit Mi Remote**. To start it at login, add it under **System Settings → General → Login Items**.
+### Android (7.0 or later)
 
-### Requirements
+1. Download `Mi-Remote-x.y.z-android.apk` on the phone and open it.
+2. Allow installing apps from your browser or file manager when Android asks, then tap **Install**.
 
-- The Mac and TV on the same network.
-- A Xiaomi Mi TV running the MiLink service (`com.mitv.milinkservice`), which is built into Mi TV firmware. Tested on a **MiTV-AXSO0** (Android TV 9).
+### iPhone (iOS 16.4 or later), without a developer account
+
+The IPA is unsigned. A sideloading tool signs it with your own Apple ID as it installs it. A free Apple ID works, with Apple's limits: the app must be refreshed every 7 days, and you can have up to 3 sideloaded apps.
+
+**Sideloadly** (simplest, needs a Mac or Windows PC):
+
+1. Install [Sideloadly](https://sideloadly.io) and connect the iPhone by USB (tap **Trust** on the phone).
+2. Drag `Mi-Remote-x.y.z-ios-unsigned.ipa` into Sideloadly, enter your Apple ID, and click **Start**.
+3. On the iPhone, enable **Settings → Privacy & Security → Developer Mode** (iOS 16+) and restart when asked.
+4. Go to **Settings → General → VPN & Device Management**, tap your Apple ID and **Trust** it.
+5. Open **Mi Remote** and allow **Local Network** access.
+
+**AltStore / SideStore** (can refresh on the phone): install [AltStore](https://altstore.io) or [SideStore](https://sidestore.io), then in its **My Apps** tab tap **+** and pick the IPA. They can refresh the 7-day signature automatically.
 
 ## Build from source
 
-Needs Xcode 16 or later (Swift 6 toolchain).
+### macOS
+
+Needs Xcode 16 or later.
 
 ```sh
-git clone https://github.com/EndLess728/MiTV-Remote-Mac.git
-cd MiTV-Remote-Mac
-./build-app.sh               # native build    -> dist/Mi Remote.app
+cd apps/macos
+./build-app.sh               # native build -> dist/Mi Remote.app
 UNIVERSAL=1 ./build-app.sh   # arm64 + x86_64
 ```
 
-During development, `swift run` launches the app directly.
+### Android and iOS
 
-### Releases (CI)
-
-[`.github/workflows/build.yml`](.github/workflows/build.yml) builds a universal, ad-hoc signed app on every push and pull request and uploads the DMG and ZIP as workflow artifacts. Pushing a version tag publishes a GitHub Release with both files attached:
+Needs Node 22 and Yarn 1. Android needs JDK 17 and the Android SDK; iOS needs Xcode and CocoaPods.
 
 ```sh
-git tag v1.0.0 && git push origin v1.0.0
+cd apps/mobile
+yarn install
+yarn android:production      # build and run on a connected device or emulator
+yarn ios:production          # build and run in the iOS simulator
 ```
+
+See [`apps/mobile/README.md`](apps/mobile/README.md) for the project layout and development workflow.
+
+### CI and releases
+
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds all three apps on every push and pull request and attaches the DMG, APK and IPA to the workflow run. Pushing a version tag publishes a GitHub Release with all of them, plus a changelog:
+
+```sh
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+No secrets are needed. The macOS app is ad-hoc signed, the APK uses the standard debug signing key, and the IPA is unsigned so that each person signs it with their own Apple ID.
 
 ## How it works
 
@@ -99,24 +119,22 @@ type 4      = send key
                                      11 source       i32  (0x101 = keyboard)
 ```
 
-The TV answers each key with a type 4 response (`code = 2`) that carries the same `id`. The app uses it to show latency.
+The TV answers each key with a type 4 response (`code = 2`) that carries the same `id`. The apps use it to show latency.
 
 Implementation notes:
 
-- **`downTime` and `eventTime` must be 0.** The TV then stamps the event with its own uptime clock. Sending the Mac's clock puts events "in the future" on the TV and can stall its input dispatcher until that time arrives. This was the hardest bug to find.
+- **`downTime` and `eventTime` must be 0.** The TV then stamps the event with its own uptime clock. Sending the device's clock puts events "in the future" on the TV and can stall its input dispatcher until that time arrives. This was the hardest bug to find.
 - **Holding a key**: the TV releases a key on its own about 175 ms after the last DOWN, so held buttons resend DOWN every 100 ms with an increasing `repeatCount`, then send UP.
 - **Text**: MiLink has no text packet, so typing maps each character to an Android key code (plus Shift) and sends it as a keystroke.
-- **Discovery**: Mi TVs advertise `_googlecast._tcp` with a TXT `md=MiTV-…` model, which the app browses and resolves to an IPv4 address.
+- **Discovery**: Mi TVs advertise `_googlecast._tcp` with a TXT `md=MiTV-…` model, which the apps browse and resolve to an IPv4 address.
 
-The source is in [`Sources/MiRemote`](Sources/MiRemote):
+Where it lives:
 
-| File | Purpose |
-|---|---|
-| `MiLinkClient.swift` | TCP connection, framing, key packets, heartbeat, reconnect, hold-to-repeat, typing |
-| `TVDiscovery.swift` | Bonjour discovery of Mi TVs |
-| `KeyCodes.swift` | Android key codes and the character-to-keystroke map |
-| `RemoteView.swift` | SwiftUI remote UI, keyboard handling and TV picker |
-| `MiRemoteApp.swift` | Menu bar status item and popover |
+| | macOS | Android / iOS |
+|---|---|---|
+| Protocol and client | [`MiLinkClient.swift`](apps/macos/Sources/MiRemote/MiLinkClient.swift) | [`src/milink`](apps/mobile/src/milink) (TypeScript, unit tested) |
+| TCP socket | Network framework | [`modules/milink`](apps/mobile/modules/milink): Swift (iOS) and Kotlin (Android) |
+| Discovery | [`TVDiscovery.swift`](apps/macos/Sources/MiRemote/TVDiscovery.swift) | Same native module: `NWBrowser` (iOS) and `NsdManager` (Android) |
 
 ## How it was reverse engineered
 
@@ -127,7 +145,7 @@ The protocol was recovered from the TV itself using **[REA](https://github.com/m
 3. **Static analysis**: REA searched and decompiled the Android classes to find the remote-control server (`RCServerThread`) and its packet classes (`SendKeyPacket`, `SendKeyHeader`, `SendKeyData`, `SendKeyHandler`), which gave the frame layout, TLV tags and key-injection path.
 4. **Runtime verification**: a small test client sent packets to port 6091 while the TV's `logcat` was watched. The service logs every parsed TLV field and `Send key success`, which confirmed each field and exposed the timestamp problem.
 
-The Mac app was then written from the confirmed protocol.
+The macOS app was written from the confirmed protocol, and the mobile apps port the same implementation.
 
 ## Disclaimer
 
