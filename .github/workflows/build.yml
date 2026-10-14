@@ -15,6 +15,8 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history and tags, for the release changelog
 
       - name: Set version
         run: |
@@ -41,6 +43,42 @@ jobs:
           name: Mi-Remote-${{ env.VERSION }}
           path: out/*
 
+      - name: Write release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          PREV=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          RANGE=${PREV:+$PREV..}$GITHUB_REF_NAME
+          {
+            echo "## Download"
+            echo
+            echo "- **Mi-Remote-$VERSION.dmg**: open it and drag **Mi Remote** to Applications"
+            echo "- **Mi-Remote-$VERSION.zip**: the same app, zipped"
+            echo
+            echo "Universal app (Apple Silicon and Intel), macOS 14 Sonoma or later."
+            echo
+            echo "## First launch"
+            echo
+            echo "The app is not notarized, so macOS blocks it the first time. Open it once, then go to"
+            echo "**System Settings → Privacy & Security** and click **Open Anyway**. Or run:"
+            echo
+            echo '```sh'
+            echo 'xattr -dr com.apple.quarantine "/Applications/Mi Remote.app"'
+            echo '```'
+            echo
+            echo "Allow **Local Network** access when asked, then click the remote icon in the menu bar."
+            echo
+            echo "## Changes"
+            echo
+            git log --no-merges --pretty='- %s (%h)' "$RANGE"
+            echo
+            if [[ -n "$PREV" ]]; then
+              echo "**Full changelog**: https://github.com/$GITHUB_REPOSITORY/compare/$PREV...$GITHUB_REF_NAME"
+            else
+              echo "**Full changelog**: https://github.com/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME"
+            fi
+          } > notes.md
+          cat notes.md
+
       - name: Publish GitHub release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
@@ -48,4 +86,4 @@ jobs:
         run: |
           gh release create "$GITHUB_REF_NAME" out/* \
             --title "Mi Remote $VERSION" \
-            --generate-notes
+            --notes-file notes.md
