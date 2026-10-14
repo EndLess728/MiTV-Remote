@@ -1,0 +1,63 @@
+{
+  "remote": {
+    "title": "Mi TV",
+    "not_connected": "Not connected · tap to choose a TV",
+    "connecting": "Connecting to {{host}}…",
+    "connected": "{{host}}",
+    "connected_latency": "{{host}} · {{ms}} ms",
+    "failed": "Can't reach {{host}} · retrying",
+    "choose_tv": "Choose TV",
+    "power": "Power",
+    "input": "Input source",
+    "apps": "Recent apps",
+    "settings": "TV settings",
+    "up": "Up",
+    "down": "Down",
+    "left": "Left",
+    "right": "Right",
+    "ok": "OK",
+    "back": "Back",
+    "home": "Home",
+    "menu": "Menu",
+    "volume": "VOL",
+    "volume_up": "Volume up",
+    "volume_down": "Volume down",
+    "channel": "CH",
+    "channel_up": "Channel up",
+    "channel_down": "Channel down",
+    "mute": "Mute",
+    "search": "Search",
+    "previous": "Previous",
+    "rewind": "Rewind",
+    "play_pause": "Play or pause",
+    "fast_forward": "Fast forward",
+    "next": "Next",
+    "type_placeholder": "Type on TV…",
+    "send_text": "Send text",
+    "delete": "Delete"
+  },
+  "connect": {
+    "title": "Connect to Mi TV",
+    "found": "Found on your network",
+    "searching": "Searching…",
+    "none_found": "No Mi TV found yet. Make sure your phone and TV are on the same Wi-Fi, or enter the TV's IP address.",
+    "rescan": "Rescan",
+    "manual": "Or enter the IP address",
+    "ip_placeholder": "e.g. 192.168.0.106",
+    "connect": "Connect",
+    "disconnect": "Disconnect",
+    "current": "Connected",
+    "haptics": "Vibrate on key press",
+    "ip_hint": "Find it on the TV under Settings → Network → Wi-Fi."
+  },
+  "common": {
+    "loading": "Loading...",
+    "ok": "OK",
+    "done": "Done"
+  },
+  "not_found": {
+    "title": "Oops!",
+    "message": "This screen doesn't exist.",
+    "go_home": "Go to the remote"
+  }
+}

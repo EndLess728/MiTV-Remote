@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/common.sh"
+
+# Validate commit message against the Conventional Commits spec.
+# Config lives in apps/mobile/commitlint.config.js. $1 is relative to the repo root.
+MSG_FILE="$(pwd)/$1"
+cd "$MOBILE_DIR"
+npx --no -- commitlint --edit "$MSG_FILE"

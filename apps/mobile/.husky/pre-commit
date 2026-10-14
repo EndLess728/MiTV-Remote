@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+. "$(dirname "$0")/common.sh"
+
+echo "===\n>> Checking branch name..."
+
+# POSIX-compatible regex match. Do not use `[[ =~ ]]` — that is bash-only and
+# breaks on Linux where /bin/sh is dash, and inside CI runners.
+if [ -z "$SKIP_BRANCH_PROTECTION" ]; then
+  BRANCH=$(git rev-parse --abbrev-ref HEAD)
+  if echo "$BRANCH" | grep -qE "^(main|master)$"; then
+    echo ">> Direct commits to '$BRANCH' are not allowed. Please use a feature branch."
+    exit 1
+  fi
+else
+  echo ">> Skipping branch protection."
+fi
+
+echo ">> Finish checking branch name"
+echo ">> Linting your files and fixing them if needed..."
+
+cd "$MOBILE_DIR"
+yarn type-check
+yarn lint-staged
