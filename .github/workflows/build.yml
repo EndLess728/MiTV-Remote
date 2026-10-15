@@ -109,6 +109,13 @@ jobs:
           NODE_ENV: production
         run: ./gradlew assembleRelease --no-daemon
 
+      # Guards against shipping without the native socket module (as v1.1.0 did, when
+      # .gitignore excluded its sources): its event name only exists in the Kotlin code.
+      - name: Verify MiLink native module is in the APK
+        run: |
+          unzip -p android/app/build/outputs/apk/release/app-release.apk 'classes*.dex' | grep -aq onTvFound \
+            || { echo "::error::MiLink native module is missing from the APK"; exit 1; }
+
       - name: Collect APK
         run: |
           mkdir -p out
@@ -155,6 +162,11 @@ jobs:
       - name: Install pods
         working-directory: apps/mobile/ios
         run: pod install
+
+      - name: Verify MiLink native module is linked
+        run: |
+          grep -q "MiLinkModule" "ios/Pods/Target Support Files/Pods-MiRemote/ExpoModulesProvider.swift" \
+            || { echo "::error::MiLink native module is not linked into the iOS app"; exit 1; }
 
       # No Apple Developer account: build unsigned. Sideloading tools re-sign the app with the
       # user's own (free) Apple ID when installing it.
