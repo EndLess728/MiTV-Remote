@@ -45,10 +45,20 @@ The apps don't depend on a specific model. They need the TV to run Xiaomi's **Mi
 **Check your TV** (it must be on the same Wi-Fi as your computer):
 
 ```sh
-nc -z -w 3 <tv-ip> 6091 && echo "MiLink found: Mi Remote should work"
+TV=<tv-ip>
+ping -c 1 -W 2 "$TV" >/dev/null && echo "TV reachable" || echo "TV not reachable: check the IP and that you're on the same network"
+for p in 6091 6095 6466; do
+  nc -z -w 3 "$TV" "$p" && echo "port $p open" || echo "port $p closed"
+done
 ```
 
-Find the TV's IP under **Settings → Network → Wi-Fi** on the TV. If the port is closed, the TV doesn't run MiLink and these apps can't control it. If you try a model not listed here, please open an issue with the model (usually under **Settings → Device Preferences → About**) and whether it worked, so the table can grow.
+Find the TV's IP under **Settings → Network → Wi-Fi** on the TV.
+
+- **Port 6091 open**: the TV runs MiLink and Mi Remote should work.
+- **Port 6091 closed** (and the TV is reachable): the TV doesn't run MiLink, so these apps can't control it yet.
+- Ports **6095** (Xiaomi's older HTTP remote) and **6466** (Google's Android TV Remote service) aren't used by the apps today. Whether they're open tells us what a non-MiLink TV could support, so please include the full output when you open an issue.
+
+If you try a model not listed here, please open an issue with the model (usually under **Settings → Device Preferences → About**), its Android TV version, the output above and whether it worked, so the table can grow.
 
 ## Install
 
