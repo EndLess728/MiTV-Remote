@@ -16,7 +16,7 @@ private enum Palette {
 // MARK: - Root
 
 struct RemoteView: View {
-    @StateObject private var client = MiLinkClient()
+    @StateObject private var client = RemoteClient()
     @StateObject private var discovery = TVDiscovery()
     @AppStorage("tvHost") private var savedHost = ""
     @State private var showConnect = false
@@ -89,6 +89,15 @@ struct RemoteView: View {
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Palette.bodyEdge))
                     .padding(14)
                 }
+            } else if client.state == .pairing {
+                // Android TVs without MiLink need a one-time code shown on the TV.
+                ZStack {
+                    Color.black.opacity(0.55)
+                    PairSheet(client: client)
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.body))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Palette.bodyEdge))
+                        .padding(14)
+                }
             }
         }
     }
@@ -137,9 +146,17 @@ struct RemoteView: View {
         HStack {
             RoundKey(symbol: "power", tint: Palette.power, help: "Power (P)") { client.press(.power) }
             Spacer()
-            RoundKey(symbol: "rectangle.on.rectangle", help: "Input source") { client.press(.tvInput) }
+            RoundKey(symbol: "rectangle.on.rectangle",
+                     help: client.tvProtocol == .atv ? "Input source (opens Settings: this TV has no input key over Wi-Fi)" : "Input source") {
+                client.press(.tvInput)
+            }
             Spacer()
-            RoundKey(symbol: "square.stack", help: "Recent apps") { client.press(.appSwitch) }
+            RoundKey(symbol: "square.stack",
+                     help: client.tvProtocol == .atv ? "Recent apps (not available on this TV over Wi-Fi)" : "Recent apps") {
+                client.press(.appSwitch)
+            }
+            .disabled(client.tvProtocol == .atv)
+            .opacity(client.tvProtocol == .atv ? 0.35 : 1)
             Spacer()
             RoundKey(symbol: "gearshape.fill", help: "Settings") { client.press(.settings) }
         }
@@ -213,6 +230,7 @@ struct RemoteView: View {
         case .connecting: return .yellow
         case .failed: return Palette.power
         case .disconnected: return .gray
+        case .pairing: return .yellow
         }
     }
 
@@ -224,13 +242,14 @@ struct RemoteView: View {
         case .connecting: return "Connecting to \(client.host)…"
         case .failed(let msg): return "Retrying · \(msg)"
         case .disconnected: return "Not connected"
+        case .pairing: return "Pairing with \(client.host)…"
         }
     }
 
     // MARK: Keyboard
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
-        if textFocused || press.modifiers.contains(.command) { return .ignored }
+        if textFocused || press.modifiers.contains(.command) || client.state == .pairing { return .ignored }
         switch press.key {
         case .upArrow: client.press(.dpadUp)
         case .downArrow: client.press(.dpadDown)
@@ -280,7 +299,7 @@ struct RoundKey: View {
 
 /// Tap = single press; press-and-hold (>350 ms) = auto-repeat until release.
 struct HoldKey: View {
-    @ObservedObject var client: MiLinkClient
+    @ObservedObject var client: RemoteClient
     var key: AndroidKey
     var symbol: String
     var size: CGFloat = 44
@@ -305,7 +324,7 @@ struct HoldKey: View {
 
 @MainActor
 func holdGesture(pressed: Binding<Bool>, holding: Binding<Bool>, task: Binding<DispatchWorkItem?>,
-                 client: MiLinkClient, key: AndroidKey) -> some Gesture {
+                 client: RemoteClient, key: AndroidKey) -> some Gesture {
     DragGesture(minimumDistance: 0)
         .onChanged { _ in
             guard !pressed.wrappedValue else { return }
@@ -347,7 +366,7 @@ struct KeyStyle<S: Shape>: ButtonStyle {
 // MARK: - D-pad
 
 struct DPad: View {
-    @ObservedObject var client: MiLinkClient
+    @ObservedObject var client: RemoteClient
     private let diameter: CGFloat = 200
 
     var body: some View {
@@ -378,7 +397,7 @@ struct DPad: View {
 }
 
 private struct DPadArrow: View {
-    @ObservedObject var client: MiLinkClient
+    @ObservedObject var client: RemoteClient
     var key: AndroidKey
     var symbol: String
     @State private var pressed = false
@@ -400,7 +419,7 @@ private struct DPadArrow: View {
 // MARK: - Rocker
 
 struct Rocker: View {
-    @ObservedObject var client: MiLinkClient
+    @ObservedObject var client: RemoteClient
     var up: AndroidKey
     var down: AndroidKey
     var label: String
@@ -422,7 +441,7 @@ struct Rocker: View {
 }
 
 private struct RockerHalf: View {
-    @ObservedObject var client: MiLinkClient
+    @ObservedObject var client: RemoteClient
     var key: AndroidKey
     var symbol: String
     @State private var pressed = false
@@ -503,3 +522,118 @@ struct ConnectSheet: View {
         .padding(18)
     }
 }
+
+// MARK: - Pair sheet
+
+/// One-time pairing for TVs that only have Google's Android TV remote service: the TV shows a
+/// 6-character code and the user types it here. Disappears once the TV is connected.
+struct PairSheet: View {
+    @ObservedObject var client: RemoteClient
+    @State private var code = ""
+    @FocusState private var codeFocused: Bool
+
+    private var verifying: Bool { client.pairingStep == .verifying }
+    private var canRetry: Bool {
+        client.pairingError == .rejected || client.pairingError == .connection || client.pairingError == .certificate
+    }
+    private var showsCodeField: Bool {
+        !canRetry && (client.pairingStep == .enterCode || client.pairingStep == .verifying)
+    }
+    private var valid: Bool { Pairing.normalize(code) != nil }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Pair with your TV")
+                .font(.headline)
+            Text("This TV (\(client.host)) doesn't have Xiaomi's MiLink service, so Mi Remote uses the Android TV remote service instead. That needs a one-time pairing.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if showsCodeField {
+                Text("Enter the 6-character code shown on your TV")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    TextField("A1B2C3", text: $code)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 18, weight: .semibold, design: .monospaced))
+                        .focused($codeFocused)
+                        .disabled(verifying)
+                        .onSubmit(submit)
+                        .onChange(of: code) { _, value in
+                            let cleaned = String(value.uppercased().filter { !$0.isWhitespace }.prefix(6))
+                            if cleaned != value { code = cleaned }
+                        }
+                    Button(action: submit) {
+                        if verifying {
+                            ProgressView().controlSize(.small)
+                        } else {
+                            Text("Pair")
+                        }
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!valid || verifying)
+                }
+            } else if !canRetry {
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Asking the TV for a pairing code…")
+                        .font(.callout)
+                }
+            }
+
+            if let message = errorMessage {
+                Text(message)
+                    .font(.callout)
+                    .foregroundStyle(Palette.power)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if client.pairingError != nil, let detail = client.lastError {
+                Text(detail)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if canRetry {
+                Button("Try again") { client.retryPairing() }
+                    .keyboardShortcut(.defaultAction)
+            }
+
+            Text("You only need to do this once per TV. If it keeps failing, on the TV open Settings → Apps → See all apps → Show system apps → Android TV Remote Service, and clear its storage.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            HStack {
+                Spacer()
+                Button("Cancel") { client.disconnect() }
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(18)
+        .onAppear { codeFocused = showsCodeField }
+        .onChange(of: client.pairingStep) { _, step in
+            if step == .starting { code = "" }
+            if step == .enterCode { codeFocused = true }
+        }
+    }
+
+    private var errorMessage: String? {
+        switch client.pairingError {
+        case .wrongCode: return "That code didn't work. Enter the code now shown on the TV."
+        case .rejected: return "The TV didn't accept the pairing. Try again, and enter the code before it disappears from the TV."
+        case .connection: return "Lost the connection to the TV while pairing."
+        case .certificate: return "Couldn't create the pairing key in your keychain."
+        case nil: return nil
+        }
+    }
+
+    private func submit() {
+        guard valid, !verifying else { return }
+        client.submitPairingCode(code)
+    }
+}
+

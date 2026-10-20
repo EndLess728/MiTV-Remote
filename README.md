@@ -1,8 +1,8 @@
 # Mi TV Remote
 
-Remote control apps for Xiaomi Mi TV (Android TV / PatchWall) on **macOS**, **Android** and **iOS**. They control the TV over Wi-Fi with no pairing and no ADB, using the TV's built-in MiLink remote service.
+Remote control apps for Xiaomi Mi TV (Android TV / PatchWall) on **macOS**, **Android** and **iOS**. They control the TV over Wi-Fi with no ADB, using a remote service built into the TV: Xiaomi's **MiLink**, with no pairing needed, or, on models without it, Google's **Android TV remote service** after a one-time pairing code.
 
-That service's protocol isn't documented, so it was **reverse engineered with [REA (Reverse Engineer Anything)](https://github.com/morluto/rea)** from the TV's own firmware (see [How it was reverse engineered](#how-it-was-reverse-engineered)).
+MiLink's protocol isn't documented, so it was **reverse engineered with [REA (Reverse Engineer Anything)](https://github.com/morluto/rea)** from the TV's own firmware (see [How it was reverse engineered](#how-it-was-reverse-engineered)).
 
 ![Mi Remote opened from the Mac menu bar controlling a Mi TV](docs/demo.gif)
 
@@ -22,13 +22,14 @@ That service's protocol isn't documented, so it was **reverse engineered with [R
 
 *The iOS app (left: remote and TV picker) and the Android app (right), in the simulator and emulator, connected to a mock MiLink TV.*
 
-All three implement the same protocol and features:
+All three implement the same protocols and features:
 
-- **Full remote layout**: power, input source, recent apps, TV settings, D-pad and OK, back, home, menu, volume, mute, search, channel up and down, and media controls.
+- **Works with more Mi TVs**: MiLink where the TV has it, otherwise the Android TV remote service, with a one-time pairing code shown on the TV. The apps pick the right one and remember it per TV.
+- **Full remote layout**: power, input source, recent apps, TV settings, D-pad and OK, back, home, menu, volume, mute, search, channel up and down, and media controls. Over the Android TV remote service, input source and recent apps work differently (see [Compatibility](#compatibility)).
 - **Hold to repeat** on the D-pad, volume and channel keys.
 - **Type on the TV**: send text to search boxes and login fields.
 - **Auto-discovery** of Mi TVs on the network, or enter the IP address by hand. See [Compatibility](#compatibility) for supported models.
-- **Auto-reconnect**, with heartbeats and a live latency readout.
+- **Auto-reconnect**, with heartbeats, and a live latency readout over MiLink.
 - **macOS**: lives in the menu bar and has keyboard shortcuts ([list](apps/macos/README.md#keyboard-shortcuts)).
 - **Mobile**: haptic feedback, and the remote reconnects when you return to the app.
 
@@ -37,10 +38,22 @@ All three implement the same protocol and features:
 | TV | Status |
 |---|---|
 | **Xiaomi Mi TV `MiTV-AXSO0`** (Android TV 9, PatchWall) | ✅ Tested with the macOS app. The mobile apps use the same protocol and have so far been tested against a mock TV |
+| **Xiaomi Mi TV `MiTV-MOOR2`** (Android TV 11, no MiLink) | ✅ Tested with the macOS app, through the Android TV remote service ([#4](https://github.com/EndLess728/MiTV-Remote/issues/4)): pairing, navigation, volume, media keys and typing work. Input source opens Settings; recent apps isn't available |
 | Other Mi TVs on Android TV with PatchWall | Expected to work, not tested |
-| Xiaomi TVs on Google TV | Unknown; may not include the MiLink service |
+| Xiaomi TVs on Google TV | Expected to work through the Android TV remote service, not tested |
 
-The apps don't depend on a specific model. They need the TV to run Xiaomi's **MiLink** service (`com.mitv.milinkservice`), which listens on **TCP port 6091**; it's the same service Xiaomi's own phone remote apps use. Any TV with that service should work.
+The apps don't depend on a specific model. They talk to one of two services on the TV:
+
+- **MiLink** (`com.mitv.milinkservice`, **TCP port 6091**), the service Xiaomi's own phone remote apps use. No pairing needed. Supported by all apps.
+- **Android TV Remote** (**TLS ports 6466 and 6467**), the service Google's TV remote app uses, present on most Android TV and Google TV models. Needs a one-time pairing: the TV shows a 6-character code, and you type it into the app. Supported by all apps.
+
+The apps try MiLink first and fall back to the Android TV remote service, and remember which one each TV uses.
+
+**Over the Android TV remote service**, the TV only acts on a limited set of keys, the same ones the Google TV app can send:
+
+- **Input source**: there's no input key, so the button opens the TV's **Settings**, where the inputs are. (Tried on the MOOR2: TV, HDMI 1–4, Guide and F1–F12 keys don't open the input menu.)
+- **Recent apps**: not available; the button is greyed out.
+- **macOS**: the pairing key is kept in your login keychain. After installing a new version, macOS may ask once for your password to let Mi Remote use it; choose **Always Allow** to keep the pairing.
 
 **Check your TV** (it must be on the same Wi-Fi as your computer):
 
@@ -54,9 +67,9 @@ done
 
 Find the TV's IP under **Settings → Network → Wi-Fi** on the TV.
 
-- **Port 6091 open**: the TV runs MiLink and Mi Remote should work.
-- **Port 6091 closed** (and the TV is reachable): the TV doesn't run MiLink, so these apps can't control it yet.
-- Ports **6095** (Xiaomi's older HTTP remote) and **6466** (Google's Android TV Remote service) aren't used by the apps today. Whether they're open tells us what a non-MiLink TV could support, so please include the full output when you open an issue.
+- **Port 6091 open**: the TV runs MiLink and every Mi Remote app should work.
+- **Port 6091 closed, 6466 open**: the TV has no MiLink but has the Android TV remote service, so the apps can control it after pairing.
+- **Both closed** (and the TV is reachable): the apps can't control this TV yet. Port **6095** (Xiaomi's older HTTP remote) isn't used by the apps; whether it's open helps judge what such a TV could support, so please include the full output when you open an issue.
 
 If you try a model not listed here, please open an issue with the model (usually under **Settings → Device Preferences → About**), its Android TV version, the output above and whether it worked, so the table can grow.
 
@@ -119,11 +132,13 @@ See [`apps/mobile/README.md`](apps/mobile/README.md) for the project layout and 
 
 ### CI and releases
 
-[`.github/workflows/build.yml`](.github/workflows/build.yml) builds all three apps on every push and pull request and attaches the DMG, APK and IPA to the workflow run. Pushing a version tag publishes a GitHub Release with all of them, plus a changelog:
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds all three apps on every push and pull request and attaches the DMG, APK and IPA to the workflow run. The macOS job first runs the Swift tests, including an end-to-end test against a stand-in Android TV ([`apps/macos/Tests/fake_tv.py`](apps/macos/Tests/fake_tv.py)): TLS 1.2 only, client certificates required, and the real pairing protocol. Pushing a version tag publishes a GitHub Release with all of them, plus a changelog:
 
 ```sh
 git tag v1.1.0 && git push origin v1.1.0
 ```
+
+Or, without a tag, run the workflow from **Actions → Build → Run workflow**, tick **release** and enter a version; it creates the tag itself. A version with a suffix, such as `1.2.0-alpha.1`, is published as a **pre-release**, so a feature branch can be tested before it's merged. Every release includes all three apps; for a quick Mac-only test build, tick **macos_only**.
 
 No secrets are needed. The macOS app is ad-hoc signed, the APK uses the standard debug signing key, and the IPA is unsigned so that each person signs it with their own Apple ID.
 
@@ -156,12 +171,24 @@ Implementation notes:
 - **Text**: MiLink has no text packet, so typing maps each character to an Android key code (plus Shift) and sends it as a keystroke.
 - **Discovery**: Mi TVs advertise `_googlecast._tcp` with a TXT `md=MiTV-…` model, which the apps browse and resolve to an IPv4 address.
 
+### Android TV Remote
+
+Mi TVs without MiLink usually still run Google's **Android TV Remote Service**, the one the Google TV app talks to (protocol v2). Both ports use **TLS 1.2** (the service is a Netty TLS 1.2 server; the apps pin 1.2, as Apple's TLS 1.3 handshake fails against it), and both require a client certificate. Messages are protobuf, each prefixed with its length as a varint.
+
+- **Pairing, port 6467.** The app sends a pairing request, then options and configuration (6-digit hex code, the app as input). The TV then shows a code. The secret is `SHA-256(client modulus, client exponent, TV modulus, TV exponent, last 2 bytes of the code)`. The code's first byte must equal the hash's first byte, which catches typos before anything is sent. Once the TV acks the secret, it trusts the app's certificate permanently.
+- **Remote, port 6466.** The TV opens with a `RemoteConfigure` and the app answers with the features it wants; the TV pings every 5 seconds and the app echoes each ping. Keys are `RemoteKeyInject` messages with Android key codes, and text goes into the focused field with `RemoteImeBatchEdit`. Only some key codes are acted on (see [Compatibility](#compatibility)). If the TV drops the TLS session before configuring, the certificate isn't paired and the app starts pairing. The apps connect plain TCP first and only then TLS, because a rejected or stalled handshake can look like a reset or timeout, which would otherwise read as "nothing listening".
+- **The client certificate.** Each app generates a 2048-bit RSA key and keeps it: in the keychain on iOS and macOS, in app storage on Android. The certificate is kept as a file next to the app's data and joined with the key into the TLS identity when connecting (on macOS a keychain label lookup of it came back empty, so the app sent no certificate and the TV refused to pair). The self-signed X.509 certificate is built by the app itself ([`src/atv/der.ts`](apps/mobile/src/atv/der.ts), [`ATVProtocol.swift`](apps/macos/Sources/MiRemote/ATVProtocol.swift)), because Apple's platforms have no API for creating certificates. The macOS app is ad-hoc signed, so after an update macOS may ask once whether it can use its keychain key; **Always Allow** keeps the pairing.
+
+The message layouts follow [androidtvremote2](https://github.com/tronikos/androidtvremote2), the library behind Home Assistant's Android TV Remote integration. The unit tests check against bytes and secrets that library produces.
+
 Where it lives:
 
 | | macOS | Android / iOS |
 |---|---|---|
-| Protocol and client | [`MiLinkClient.swift`](apps/macos/Sources/MiRemote/MiLinkClient.swift) | [`src/milink`](apps/mobile/src/milink) (TypeScript, unit tested) |
-| TCP socket | Network framework | [`modules/milink`](apps/mobile/modules/milink): Swift (iOS) and Kotlin (Android) |
+| MiLink protocol | [`RemoteClient.swift`](apps/macos/Sources/MiRemote/RemoteClient.swift) | [`src/milink`](apps/mobile/src/milink) (TypeScript, unit tested) |
+| Android TV Remote protocol | [`ATVProtocol.swift`](apps/macos/Sources/MiRemote/ATVProtocol.swift) (unit tested) | [`src/atv`](apps/mobile/src/atv) (TypeScript, unit tested) |
+| Connection, protocol choice, pairing | `RemoteClient.swift` | [`src/remote/client.ts`](apps/mobile/src/remote/client.ts) |
+| TCP / TLS socket, client key | Network framework | [`modules/milink`](apps/mobile/modules/milink): Swift (iOS) and Kotlin (Android) |
 | Discovery | [`TVDiscovery.swift`](apps/macos/Sources/MiRemote/TVDiscovery.swift) | Same native module: `NWBrowser` (iOS) and `NsdManager` (Android) |
 
 ## How it was reverse engineered

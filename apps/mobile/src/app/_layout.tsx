@@ -45,6 +45,18 @@ function RootNavigator(): React.JSX.Element {
             : { presentation: 'modal', animation: 'slide_from_bottom' }
         }
       />
+      <Stack.Screen
+        name="pair"
+        options={
+          Platform.OS === 'ios'
+            ? {
+                presentation: 'formSheet',
+                sheetAllowedDetents: [0.75, 1],
+                sheetGrabberVisible: true,
+              }
+            : { presentation: 'modal', animation: 'slide_from_bottom' }
+        }
+      />
       <Stack.Screen name="+not-found" />
     </Stack>
   );

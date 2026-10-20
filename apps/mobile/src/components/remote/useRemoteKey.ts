@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from 'react';
 import * as Haptics from 'expo-haptics';
 
-import { milink } from '@/milink/client';
 import type { AndroidKeyName } from '@/milink/keys';
+import { remote } from '@/remote/client';
 import { useSettingsStore } from '@/store';
 
 /** How long a finger must stay down before a repeating key starts repeating. */
@@ -26,7 +26,7 @@ export function useRemoteKey(key: AndroidKeyName, repeat = false) {
   useEffect(
     () => () => {
       clearTimeout(holdTimer.current);
-      if (holding.current) milink.endHold();
+      if (holding.current) remote.endHold();
     },
     [],
   );
@@ -37,7 +37,7 @@ export function useRemoteKey(key: AndroidKeyName, repeat = false) {
     holding.current = false;
     holdTimer.current = setTimeout(() => {
       holding.current = true;
-      milink.beginHold(key);
+      remote.beginHold(key);
     }, HOLD_DELAY_MS);
   }, [key, repeat]);
 
@@ -45,9 +45,9 @@ export function useRemoteKey(key: AndroidKeyName, repeat = false) {
     clearTimeout(holdTimer.current);
     if (holding.current) {
       holding.current = false;
-      milink.endHold();
+      remote.endHold();
     } else {
-      milink.press(key);
+      remote.press(key);
     }
   }, [key]);
 

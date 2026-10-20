@@ -4,14 +4,14 @@ import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@react-native-vector-icons/ionicons';
-import { router } from 'expo-router';
+import { router, usePathname } from 'expo-router';
 
 import { DPad } from '@/components/remote/DPad';
 import { RemoteKey } from '@/components/remote/RemoteKey';
 import { Rocker } from '@/components/remote/Rocker';
 import { tapFeedback } from '@/components/remote/useRemoteKey';
 import { useTranslate } from '@/localization/utils';
-import { milink, useConnectionStore } from '@/milink/client';
+import { remote, useConnectionStore } from '@/remote/client';
 import { useSettingsStore } from '@/store';
 import { TextStyles } from '@/theme';
 import { ms } from '@/utils';
@@ -28,6 +28,7 @@ function StatusHeader() {
     connecting: theme.colors.statusConnecting,
     connected: theme.colors.statusConnected,
     failed: theme.colors.statusFailed,
+    pairing: theme.colors.statusConnecting,
   }[status];
 
   const subtitle = {
@@ -38,6 +39,7 @@ function StatusHeader() {
         ? t('remote.connected', { host })
         : t('remote.connected_latency', { host, ms: latencyMs }),
     failed: t('remote.failed', { host }),
+    pairing: t('remote.pairing', { host }),
   }[status];
 
   return (
@@ -68,7 +70,7 @@ function TypeBar() {
 
   const send = () => {
     if (!text) return;
-    milink.type(text);
+    remote.type(text);
     setText('');
   };
 
@@ -93,7 +95,7 @@ function TypeBar() {
         hitSlop={8}
         onPress={() => {
           tapFeedback();
-          milink.press('del');
+          remote.press('del');
         }}
       >
         <Ionicons color={theme.colors.remoteDim} name="backspace-outline" size={ms(20)} />
@@ -106,12 +108,21 @@ export default function RemoteScreen(): React.JSX.Element {
   const t = useTranslate();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const status = useConnectionStore((s) => s.status);
+  // The Android TV Remote service has no recent-apps key (see atvKey in the client).
+  const atv = useConnectionStore((s) => s.protocol === 'atv');
+  const pathname = usePathname();
+
+  // Android TVs without MiLink need a one-time pairing code; ask for it when the client does.
+  useEffect(() => {
+    if (status === 'pairing' && pathname !== '/pair') router.push('/pair');
+  }, [status, pathname]);
 
   // Connect to the saved TV, or ask the user to pick one on first launch.
   useEffect(() => {
     const { tvHost } = useSettingsStore.getState();
     if (tvHost) {
-      milink.connect(tvHost);
+      remote.connect(tvHost);
     } else {
       router.push('/connect');
     }
@@ -120,8 +131,8 @@ export default function RemoteScreen(): React.JSX.Element {
   // Phones kill background sockets anyway; drop it cleanly and reconnect on return.
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (state) => {
-      if (state === 'active') milink.resume();
-      else if (state === 'background') milink.suspend();
+      if (state === 'active') remote.resume();
+      else if (state === 'background') remote.suspend();
     });
     return () => subscription.remove();
   }, []);
@@ -143,6 +154,7 @@ export default function RemoteScreen(): React.JSX.Element {
           <RemoteKey accessibilityLabel={t('remote.input')} icon="tv-outline" keyName="tvInput" />
           <RemoteKey
             accessibilityLabel={t('remote.apps')}
+            disabled={atv}
             icon="apps-outline"
             keyName="appSwitch"
           />

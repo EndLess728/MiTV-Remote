@@ -18,6 +18,8 @@ interface RemoteKeyProps {
   size?: number;
   variant?: Variant;
   style?: ViewStyle;
+  /** Dimmed and inert, for keys the connected TV doesn't support. */
+  disabled?: boolean;
 }
 
 /** A round remote button that sends one Android key. */
@@ -29,6 +31,7 @@ export function RemoteKey({
   size = ms(52),
   variant = 'default',
   style,
+  disabled = false,
 }: RemoteKeyProps): React.JSX.Element {
   const { theme } = useUnistyles();
   const handlers = useRemoteKey(keyName, repeat);
@@ -38,8 +41,14 @@ export function RemoteKey({
     <Pressable
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
       hitSlop={6}
-      style={({ pressed }) => [styles.key(size, variant, pressed), style]}
+      style={({ pressed }) => [
+        styles.key(size, variant, pressed),
+        disabled && styles.disabled,
+        style,
+      ]}
       {...handlers}
     >
       <Ionicons color={iconColor} name={icon} size={size * 0.42} />
@@ -48,6 +57,9 @@ export function RemoteKey({
 }
 
 const styles = StyleSheet.create((theme) => ({
+  disabled: {
+    opacity: 0.35,
+  },
   key: (size: number, variant: Variant, pressed: boolean) => {
     const fill =
       variant === 'accent'
