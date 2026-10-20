@@ -38,7 +38,7 @@ All three implement the same protocols and features:
 | TV | Status |
 |---|---|
 | **Xiaomi Mi TV `MiTV-AXSO0`** (Android TV 9, PatchWall) | ✅ Tested with the macOS app. The mobile apps use the same protocol and have so far been tested against a mock TV |
-| **Xiaomi Mi TV `MiTV-MOOR2`** (Android TV 11, no MiLink) | ✅ Tested with the macOS app, through the Android TV remote service ([#4](https://github.com/EndLess728/MiTV-Remote/issues/4)): pairing, navigation, volume, media keys and typing work. Input source opens Settings; recent apps isn't available |
+| **Xiaomi Mi TV `MiTV-MOOR2`** (Android TV 11, no MiLink) | ✅ Tested with the macOS app, through the Android TV remote service ([#4](https://github.com/EndLess728/MiTV-Remote/issues/4)): pairing, navigation, volume, media keys, typing and switching HDMI inputs work. Recent apps isn't available |
 | Other Mi TVs on Android TV with PatchWall | Expected to work, not tested |
 | Xiaomi TVs on Google TV | Expected to work through the Android TV remote service, not tested |
 
@@ -51,7 +51,7 @@ The apps try MiLink first and fall back to the Android TV remote service, and re
 
 **Over the Android TV remote service**, the TV only acts on a limited set of keys, the same ones the Google TV app can send:
 
-- **Input source**: there's no input key, so the button opens the TV's **Settings**, where the inputs are. (Tried on the MOOR2: TV, HDMI 1–4, Guide and F1–F12 keys don't open the input menu.)
+- **Input source**: there's no input key, so the button opens a picker that switches straight to **HDMI 1, 2 or 3**, or opens **Settings** for the full list of inputs. The switch is a TV-input link (`content://android.media.tv/passthrough/…`) sent as an app-link request, with the input IDs MediaTek-based Mi TVs use. The input menu itself can't be opened this way: the service only passes plain links, and drops the connection on `intent:` links.
 - **Recent apps**: not available; the button is greyed out.
 - **macOS**: the pairing key is kept in your login keychain. After installing a new version, macOS may ask once for your password to let Mi Remote use it; choose **Always Allow** to keep the pairing.
 

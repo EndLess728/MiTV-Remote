@@ -74,5 +74,11 @@
     "error_connection": "Lost the connection to the TV while pairing.",
     "error_certificate": "Couldn't create the pairing key on this phone.",
     "hint": "You only need to do this once per TV. If it keeps failing, on the TV open Settings → Apps → See all apps → Show system apps → Android TV Remote Service, and clear its storage."
+  },
+  "inputs": {
+    "title": "Input source",
+    "settings": "Settings",
+    "settings_hint": "Settings has the full list of inputs.",
+    "cancel": "Cancel"
   }
 }

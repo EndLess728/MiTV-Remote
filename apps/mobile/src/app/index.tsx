@@ -1,11 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { AppState, Pressable, Text, TextInput, useWindowDimensions, View } from 'react-native';
+import {
+  AppState,
+  Modal,
+  Pressable,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from 'react-native';
 import { KeyboardStickyView } from 'react-native-keyboard-controller';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { StyleSheet, useUnistyles } from 'react-native-unistyles';
 import { Ionicons } from '@react-native-vector-icons/ionicons';
 import { router, usePathname } from 'expo-router';
 
+import { hdmiInputLink } from '@/atv/messages';
 import { DPad } from '@/components/remote/DPad';
 import { RemoteKey } from '@/components/remote/RemoteKey';
 import { Rocker } from '@/components/remote/Rocker';
@@ -63,6 +72,52 @@ function StatusHeader() {
   );
 }
 
+/**
+ * Input picker for TVs on the Android TV remote service, which has no input-source key (#6):
+ * HDMI inputs switch by passthrough link; Settings lists every input. Closes once one is chosen.
+ */
+function InputPicker({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+  const t = useTranslate();
+  const choose = (action: () => void) => {
+    tapFeedback();
+    action();
+    onClose();
+  };
+
+  return (
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+      <Pressable style={styles.pickerBackdrop} onPress={onClose}>
+        <Pressable style={styles.picker}>
+          <Text style={[TextStyles.bodySemiBold, styles.title]}>{t('inputs.title')}</Text>
+          <View style={styles.pickerRow}>
+            {[1, 2, 3].map((port) => (
+              <Pressable
+                key={port}
+                accessibilityRole="button"
+                style={({ pressed }) => styles.pickerChoice(pressed)}
+                onPress={() => choose(() => remote.openLink(hdmiInputLink(port)))}
+              >
+                <Text style={[TextStyles.bodySemiBold, styles.title]}>HDMI {port}</Text>
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => styles.pickerChoice(pressed)}
+            onPress={() => choose(() => remote.press('settings'))}
+          >
+            <Text style={[TextStyles.bodySemiBold, styles.title]}>{t('inputs.settings')}</Text>
+          </Pressable>
+          <Text style={[TextStyles.caption, styles.subtitle]}>{t('inputs.settings_hint')}</Text>
+          <Pressable accessibilityRole="button" style={styles.pickerCancel} onPress={onClose}>
+            <Text style={[TextStyles.bodySemiBold, styles.subtitle]}>{t('inputs.cancel')}</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
 function TypeBar() {
   const { theme } = useUnistyles();
   const t = useTranslate();
@@ -111,6 +166,7 @@ export default function RemoteScreen(): React.JSX.Element {
   const status = useConnectionStore((s) => s.status);
   // The Android TV Remote service has no recent-apps key (see atvKey in the client).
   const atv = useConnectionStore((s) => s.protocol === 'atv');
+  const [showInputs, setShowInputs] = useState(false);
   const pathname = usePathname();
 
   // Android TVs without MiLink need a one-time pairing code; ask for it when the client does.
@@ -151,7 +207,12 @@ export default function RemoteScreen(): React.JSX.Element {
             keyName="power"
             variant="power"
           />
-          <RemoteKey accessibilityLabel={t('remote.input')} icon="tv-outline" keyName="tvInput" />
+          <RemoteKey
+            accessibilityLabel={t('remote.input')}
+            icon="tv-outline"
+            keyName="tvInput"
+            onPress={atv ? () => setShowInputs(true) : undefined}
+          />
           <RemoteKey
             accessibilityLabel={t('remote.apps')}
             disabled={atv}
@@ -246,6 +307,8 @@ export default function RemoteScreen(): React.JSX.Element {
 
         {/* Rides above the keyboard so the text stays visible while typing. The bar sits
             insets.bottom + 8 (screen) + 16 (body) above the screen edge; keep an 8pt gap. */}
+        <InputPicker visible={showInputs} onClose={() => setShowInputs(false)} />
+
         <KeyboardStickyView offset={{ opened: insets.bottom + ms(16) }}>
           <TypeBar />
         </KeyboardStickyView>
@@ -255,6 +318,38 @@ export default function RemoteScreen(): React.JSX.Element {
 }
 
 const styles = StyleSheet.create((theme, rt) => ({
+  pickerBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: ms(24),
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  picker: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    gap: ms(10),
+    padding: ms(18),
+    borderRadius: ms(18),
+    backgroundColor: theme.colors.remoteBody,
+  },
+  pickerRow: {
+    flexDirection: 'row',
+    gap: ms(8),
+  },
+  pickerChoice: (pressed: boolean) => ({
+    flex: 1,
+    height: ms(46),
+    borderRadius: ms(12),
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: pressed ? theme.colors.remoteKeyPressed : theme.colors.remoteKey,
+  }),
+  pickerCancel: {
+    alignSelf: 'flex-end',
+    paddingVertical: ms(6),
+    paddingHorizontal: ms(8),
+  },
   screen: {
     flex: 1,
     backgroundColor: theme.colors.remoteScreen,

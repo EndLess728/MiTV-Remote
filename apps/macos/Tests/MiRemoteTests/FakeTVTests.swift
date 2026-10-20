@@ -69,10 +69,10 @@ final class FakeTVTests: XCTestCase {
         }
 
         // Links reach the TV as app-link launch requests.
-        client.openLink(InputSourceOption.inputMenu.link)
+        client.openLink(InputSourceOption.hdmi1.link!)
         try await waitUntil("the TV to receive the link", client: client) {
             ((try? String(contentsOfFile: keysFile, encoding: .utf8)) ?? "")
-                .contains("link \(InputSourceOption.inputMenu.link)")
+                .contains("link \(InputSourceOption.hdmi1.link!)")
         }
 
         // Reconnecting reuses the pairing: straight to connected, no new code.

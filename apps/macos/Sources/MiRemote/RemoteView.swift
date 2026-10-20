@@ -20,8 +20,7 @@ struct RemoteView: View {
     @StateObject private var discovery = TVDiscovery()
     @AppStorage("tvHost") private var savedHost = ""
     @State private var showConnect = false
-    /// Over Android TV Remote there's no input-source key; this panel offers the ways being
-    /// tested in #6 (opening the input menu by link, or switching HDMI inputs directly).
+    /// Over Android TV Remote there's no input-source key; this picker switches inputs by link.
     @State private var showInputs = false
     @State private var text = ""
     @FocusState private var remoteFocused: Bool
@@ -651,12 +650,11 @@ struct PairSheet: View {
 
 // MARK: - Input source (Android TV Remote)
 
-/// Ways to reach the TV's inputs over the Android TV remote service, which has no input key
-/// (#6). Being tested on a MiTV-MOOR2: its Live TV app opens the input menu on the standard
-/// `com.android.tv.action.VIEW_INPUTS` action, and switches inputs on TV-input passthrough links.
+/// Inputs reachable over the Android TV remote service, which has no input-source key (#6). The
+/// TV's Live TV app switches inputs on TV-input passthrough links, sent as app-link requests.
+/// Opening the input menu itself by link doesn't work: the service drops the connection on
+/// intent: links (tested on a MiTV-MOOR2).
 enum InputSourceOption: CaseIterable, Identifiable {
-    case inputMenu
-    case xiaomiInputMenu
     case hdmi1
     case hdmi2
     case hdmi3
@@ -666,8 +664,6 @@ enum InputSourceOption: CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .inputMenu: return "Input menu"
-        case .xiaomiInputMenu: return "Input menu (Xiaomi)"
         case .hdmi1: return "HDMI 1"
         case .hdmi2: return "HDMI 2"
         case .hdmi3: return "HDMI 3"
@@ -675,16 +671,14 @@ enum InputSourceOption: CaseIterable, Identifiable {
         }
     }
 
-    /// The app link sent to the TV; nil for Settings, which is a key.
-    var link: String {
+    /// The passthrough link for an HDMI input. MediaTek-based Mi TVs name HDMI port n's input
+    /// HW(n+3) in their TV input service. Nil for Settings, which is a key.
+    var link: String? {
         switch self {
-        case .inputMenu: return "intent:#Intent;action=com.android.tv.action.VIEW_INPUTS;end"
-        case .xiaomiInputMenu: return "intent:#Intent;component=com.mitv.livetv/.input.SelectInputActivity;end"
-        // MediaTek-based Mi TVs: HDMI port n is hardware input HW(n+3).
         case .hdmi1: return Self.passthrough("HW4")
         case .hdmi2: return Self.passthrough("HW5")
         case .hdmi3: return Self.passthrough("HW6")
-        case .settings: return ""
+        case .settings: return nil
         }
     }
 
@@ -693,52 +687,47 @@ enum InputSourceOption: CaseIterable, Identifiable {
     }
 }
 
+/// Input picker for TVs on the Android TV remote service. Closes once an input is chosen.
 struct InputSourceSheet: View {
     @ObservedObject var client: RemoteClient
     var onClose: () -> Void
-    @State private var lastSent: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Input source")
                 .font(.headline)
-            Text("This TV has no input key over Wi-Fi. Try opening the input menu, or switch straight to an HDMI input. (Testing: please tell us in issue #6 which of these work.)")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 2), spacing: 6) {
-                ForEach(InputSourceOption.allCases) { option in
-                    Button {
-                        if option == .settings {
-                            client.press(.settings)
-                            lastSent = "Settings key"
-                        } else {
-                            client.openLink(option.link)
-                            lastSent = option.link
-                        }
-                    } label: {
-                        Text(option.title)
-                            .font(.system(size: 12, weight: .semibold))
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.8)
-                            .frame(maxWidth: .infinity, minHeight: 32)
-                    }
-                    .buttonStyle(KeyStyle(shape: RoundedRectangle(cornerRadius: 8, style: .continuous), fill: Palette.key))
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+                ForEach(InputSourceOption.allCases.filter { $0 != .settings }) { option in
+                    choice(option)
                 }
             }
-            if let lastSent {
-                Text("Sent: \(lastSent)")
-                    .font(.system(size: 9, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
+            choice(.settings)
+            Text("Settings has the full list of inputs.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             HStack {
                 Spacer()
-                Button("Done", action: onClose)
+                Button("Cancel", action: onClose)
                     .keyboardShortcut(.cancelAction)
             }
         }
         .padding(18)
+    }
+
+    private func choice(_ option: InputSourceOption) -> some View {
+        Button {
+            if let link = option.link {
+                client.openLink(link)
+            } else {
+                client.press(.settings)
+            }
+            onClose()
+        } label: {
+            Text(option.title)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, minHeight: 32)
+        }
+        .buttonStyle(KeyStyle(shape: RoundedRectangle(cornerRadius: 8, style: .continuous), fill: Palette.key))
     }
 }
