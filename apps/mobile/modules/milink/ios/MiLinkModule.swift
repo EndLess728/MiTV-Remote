@@ -24,7 +24,8 @@ public class MiLinkModule: Module {
     }
 
     AsyncFunction("clientKey") { () throws -> [String: Any] in
-      var result: [String: Any] = ["publicKey": try ClientIdentity.publicKey().map { Int($0) }]
+      let publicKey = try ClientIdentity.publicKey()
+      var result: [String: Any] = ["publicKey": publicKey.map { Int($0) }]
       if let cert = ClientIdentity.certificate() {
         result["certificate"] = cert.map { Int($0) }
       }
