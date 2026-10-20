@@ -490,6 +490,8 @@ final class RemoteClient: ObservableObject {
         case .imeBatchEdit(let ime, let field):
             imeCounter = ime
             imeFieldCounter = field
+        case .imeField(let field):
+            imeFieldCounter = field
         case .error, .other:
             break
         }
@@ -642,25 +644,21 @@ final class RemoteClient: ObservableObject {
         if sendUp && phase == .milink { write(keyPacket(code: repeatCode, action: 1)) }
     }
 
-    /// Types text on the TV. Android TV Remote puts it straight into the focused text field when
-    /// the TV has reported one; otherwise, and on MiLink, it's typed one keystroke at a time and
-    /// characters with no Android key are skipped.
+    /// Types text on the TV. Android TV Remote sends it as an IME edit into the focused text
+    /// field (the TV ignores letter key events there). MiLink types one keystroke at a time and
+    /// skips characters with no Android key.
     func type(_ text: String) {
         guard !text.isEmpty else { return }
-        if phase == .atv, state == .connected, let imeCounter {
-            sendDelimited(RemoteMessage.imeBatchEdit(imeCounter: imeCounter, fieldCounter: imeFieldCounter, text: text))
+        if phase == .atv {
+            guard state == .connected else { return }
+            sendDelimited(RemoteMessage.imeBatchEdit(imeCounter: imeCounter ?? 0, fieldCounter: imeFieldCounter, text: text))
             return
         }
-        let atv = phase == .atv
         var delay = 0.0
         for ch in text {
             guard let stroke = androidKeystroke(for: ch) else { continue }
-            // Android TV Remote key events carry no Shift: letters come out lowercase, and other
-            // shifted characters would come out wrong, so they're skipped.
-            if atv && stroke.meta != 0 && !(ch.isASCII && ch.isUppercase) { continue }
-            let meta = atv ? 0 : stroke.meta
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
-                self?.press(code: stroke.code, meta: meta)
+                self?.press(code: stroke.code, meta: stroke.meta)
             }
             delay += 0.04
         }

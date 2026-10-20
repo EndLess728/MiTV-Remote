@@ -399,6 +399,12 @@ class RemoteClient {
         this.imeCounter = event.imeCounter;
         this.imeFieldCounter = event.fieldCounter;
         break;
+      case 'imeShow':
+        this.imeFieldCounter = event.fieldCounter;
+        break;
+      case 'imeKeyInject':
+        if (event.fieldCounter !== undefined) this.imeFieldCounter = event.fieldCounter;
+        break;
       default:
         break;
     }
@@ -555,25 +561,22 @@ class RemoteClient {
   }
 
   /**
-   * Types text on the TV. Android TV Remote puts it straight into the focused text field when
-   * the TV has reported one; otherwise, and on MiLink, it is typed one keystroke at a time and
-   * characters with no Android key are skipped.
+   * Types text on the TV. Android TV Remote sends it as an IME edit into the focused text field
+   * (the TV ignores letter key events there). MiLink types one keystroke at a time and skips
+   * characters with no Android key.
    */
   type(text: string): void {
     if (!text) return;
-    if (this.phase === 'atv' && this.isConnected && this.imeCounter !== undefined) {
-      this.sendDelimited(imeBatchEdit(this.imeCounter, this.imeFieldCounter, text));
+    if (this.phase === 'atv') {
+      if (!this.isConnected) return;
+      this.sendDelimited(imeBatchEdit(this.imeCounter ?? 0, this.imeFieldCounter, text));
       return;
     }
-    const atv = this.phase === 'atv';
     let delay = 0;
     for (const ch of text) {
       const stroke = keystrokeFor(ch);
       if (!stroke) continue;
-      // Android TV Remote key events carry no Shift: letters come out lowercase, and other
-      // shifted characters would come out wrong, so they're skipped.
-      if (atv && stroke.meta && !/[A-Z]/.test(ch)) continue;
-      setTimeout(() => this.pressCode(stroke.code, atv ? 0 : stroke.meta), delay);
+      setTimeout(() => this.pressCode(stroke.code, stroke.meta), delay);
       delay += TYPE_INTERVAL_MS;
     }
   }

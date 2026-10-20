@@ -153,9 +153,12 @@ export function keyInject(code: number, direction: number): Bytes {
   return fieldMessage(10, [...fieldVarint(1, code), ...fieldVarint(2, direction)]);
 }
 
-/** Puts `text` into the focused text field on the TV. */
+/**
+ * Puts `text` into the focused text field on the TV, cursor after it. The counters echo the
+ * TV's latest (0 before it has sent any), as the Google TV app and other clients do.
+ */
 export function imeBatchEdit(imeCounter: number, fieldCounter: number, text: string): Bytes {
-  const cursor = text.length - 1;
+  const cursor = Array.from(text).length;
   const imeObject = [...fieldVarint(1, cursor), ...fieldVarint(2, cursor), ...fieldString(3, text)];
   const editInfo = [...fieldVarint(1, 1), ...fieldMessage(2, imeObject)];
   return fieldMessage(21, [
@@ -171,7 +174,8 @@ export type RemoteEvent =
   | { type: 'ping'; value: number }
   | { type: 'start'; started: boolean }
   | { type: 'imeBatchEdit'; imeCounter: number; fieldCounter: number }
-  | { type: 'imeKeyInject'; appPackage: string }
+  | { type: 'imeKeyInject'; appPackage: string; fieldCounter?: number }
+  | { type: 'imeShow'; fieldCounter: number }
   | { type: 'volume'; level: number; max: number; muted: boolean }
   | { type: 'error' }
   | { type: 'other' };
@@ -195,8 +199,16 @@ export function parseRemoteMessage(bytes: Bytes): RemoteEvent {
   const imeKey = getMessage(msg, 20);
   if (imeKey) {
     const app = getMessage(imeKey, 1);
-    return { type: 'imeKeyInject', appPackage: app ? getString(app, 12) : '' };
+    const field = getMessage(imeKey, 2);
+    return {
+      type: 'imeKeyInject',
+      appPackage: app ? getString(app, 12) : '',
+      fieldCounter: field ? getInt(field, 1) : undefined,
+    };
   }
+  const show = getMessage(msg, 22);
+  const showField = show ? getMessage(show, 2) : undefined;
+  if (showField) return { type: 'imeShow', fieldCounter: getInt(showField, 1) };
   const batch = getMessage(msg, 21);
   if (batch) {
     return { type: 'imeBatchEdit', imeCounter: getInt(batch, 1), fieldCounter: getInt(batch, 2) };

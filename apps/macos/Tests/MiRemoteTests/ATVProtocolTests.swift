@@ -60,13 +60,15 @@ final class ATVProtocolTests: XCTestCase {
         XCTAssertEqual(RemoteMessage.keyInject(code: 19, direction: .short), [82, 4, 8, 19, 16, 3])
         XCTAssertEqual(RemoteMessage.pingResponse(-5), [74, 11, 8, 251, 255, 255, 255, 255, 255, 255, 255, 255, 1])
         XCTAssertEqual(RemoteMessage.setActive(features: 615), [18, 3, 8, 231, 4])
-        XCTAssertEqual(RemoteMessage.imeBatchEdit(imeCounter: 3, fieldCounter: 7, text: "héllo"), [170, 1, 22, 8, 3, 16, 7, 26, 16, 8, 1, 18, 12, 8, 4, 16, 4, 26, 6, 104, 195, 169, 108, 108, 111])
+        XCTAssertEqual(RemoteMessage.imeBatchEdit(imeCounter: 3, fieldCounter: 7, text: "héllo"), [170, 1, 22, 8, 3, 16, 7, 26, 16, 8, 1, 18, 12, 8, 5, 16, 5, 26, 6, 104, 195, 169, 108, 108, 111])
         XCTAssertEqual(RemoteMessage.configure(features: 615), [10, 50, 8, 231, 4, 18, 45, 10, 9, 77, 105, 32, 82, 101, 109, 111, 116, 101, 18, 9, 77, 105, 32, 82, 101, 109, 111, 116, 101, 24, 1, 34, 1, 49, 42, 9, 97, 116, 118, 114, 101, 109, 111, 116, 101, 50, 5, 49, 46, 48, 46, 48])
         XCTAssertEqual(RemoteMessage.wantedFeatures, 615)
     }
 
     func testParsesRemoteMessages() throws {
         XCTAssertEqual(try RemoteMessage.parse([66, 5, 8, 185, 96, 16, 1]), .ping(12345))
+        XCTAssertEqual(try RemoteMessage.parse([178, 1, 12, 18, 10, 8, 4, 50, 6, 83, 101, 97, 114, 99, 104]), .imeField(fieldCounter: 4))
+        XCTAssertEqual(try RemoteMessage.parse([162, 1, 19, 10, 13, 98, 11, 99, 111, 109, 46, 110, 101, 116, 102, 108, 105, 120, 18, 2, 8, 6]), .imeField(fieldCounter: 6))
         XCTAssertEqual(try RemoteMessage.parse([10, 25, 8, 255, 4, 18, 20, 10, 10, 77, 105, 84, 86, 45, 77, 79, 79, 82, 50, 18, 6, 88, 105, 97, 111, 109, 105]), .configure(features: 639, model: "MiTV-MOOR2"))
         XCTAssertEqual(try RemoteMessage.parse([194, 2, 2, 8, 1]), .start(true))
         XCTAssertEqual(try RemoteMessage.parse([170, 1, 4, 8, 9, 16, 2]), .imeBatchEdit(imeCounter: 9, fieldCounter: 2))

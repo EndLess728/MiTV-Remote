@@ -6,7 +6,8 @@ Behaves like the TV's Android TV Remote Service, as far as the client can tell:
         6-character code a real TV would show to --code-file and waits for the secret.
   6466  remote: TLS 1.2 that only completes for a paired client certificate (anything else gets
         a TLS alert during the handshake). Sends RemoteConfigure, SetActive and RemoteStart, and
-        appends every key the client injects to --keys-file as "<keycode> <direction>".
+        appends every key the client injects to --keys-file as "<keycode> <direction>", and every
+        IME text edit as "text <ime counter> <field counter> <cursor> <text>".
 
 Usage: python3 fake_tv.py --code-file PATH --keys-file PATH
 Needs: pip install androidtvremote2 pyopenssl (for the protobuf definitions and a TLS server
@@ -197,6 +198,14 @@ def handle_remote(conn: SSL.Connection, args: argparse.Namespace) -> None:
             session.send(ping)
         elif msg.HasField("remote_ping_response"):
             log("remote: ping answered", msg.remote_ping_response.val1)
+        elif msg.HasField("remote_ime_batch_edit"):
+            edit = msg.remote_ime_batch_edit
+            for info in edit.edit_info:
+                field = info.text_field_status
+                line = f"text {edit.ime_counter} {edit.field_counter} {field.end} {field.value}"
+                log("remote:", line)
+                with open(args.keys_file, "a") as f:
+                    f.write(line + "\n")
         elif msg.HasField("remote_key_inject"):
             key = msg.remote_key_inject
             log("remote: key", key.key_code, key.direction)

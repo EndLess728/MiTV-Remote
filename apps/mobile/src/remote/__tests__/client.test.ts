@@ -5,6 +5,7 @@ import {
   ATV_PAIRING_PORT,
   ATV_REMOTE_PORT,
   Direction,
+  imeBatchEdit,
   keyInject,
   pairingConfiguration,
   pairingOptions,
@@ -138,6 +139,11 @@ describe('RemoteClient', () => {
     mockNative.send.mockClear();
     remote.press('dpadUp');
     expect(sentMessages()).toEqual([delimited(keyInject(19, Direction.short))]);
+
+    // Text goes in as an IME edit even before the TV has sent IME counters.
+    mockNative.send.mockClear();
+    remote.type('Hi');
+    expect(sentMessages()).toEqual([delimited(imeBatchEdit(0, 0, 'Hi'))]);
   });
 
   it('goes straight to Android TV Remote for a TV known to use it', async () => {

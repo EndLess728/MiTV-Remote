@@ -62,6 +62,12 @@ final class FakeTVTests: XCTestCase {
         let keys = try String(contentsOfFile: keysFile, encoding: .utf8)
         XCTAssertEqual(keys, "19 3\n3 3\n")
 
+        // Text goes in as an IME edit, even before the TV has sent any IME counters.
+        client.type("Hello!")
+        try await waitUntil("the TV to receive typed text", client: client) {
+            ((try? String(contentsOfFile: keysFile, encoding: .utf8)) ?? "").contains("text 0 0 6 Hello!")
+        }
+
         // Reconnecting reuses the pairing: straight to connected, no new code.
         client.disconnect()
         try? FileManager.default.removeItem(atPath: codeFile)

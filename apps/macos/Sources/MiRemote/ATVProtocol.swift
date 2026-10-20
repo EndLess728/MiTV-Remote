@@ -212,9 +212,10 @@ enum RemoteMessage {
         Proto.bytes(10, Proto.int(1, Int64(code)) + Proto.int(2, direction.rawValue))
     }
 
-    /// Puts `text` into the focused text field on the TV.
+    /// Puts `text` into the focused text field on the TV, cursor after it. The counters echo the
+    /// TV's latest (0 before it has sent any), as the Google TV app and other clients do.
     static func imeBatchEdit(imeCounter: Int32, fieldCounter: Int32, text: String) -> [UInt8] {
-        let cursor = Int64(text.unicodeScalars.count - 1)
+        let cursor = Int64(text.unicodeScalars.count)
         let imeObject = Proto.int(1, cursor) + Proto.int(2, cursor) + Proto.string(3, text)
         let editInfo = Proto.int(1, 1) + Proto.bytes(2, imeObject)
         return Proto.bytes(21, Proto.int(1, Int64(imeCounter)) + Proto.int(2, Int64(fieldCounter)) + Proto.bytes(3, editInfo))
@@ -226,6 +227,8 @@ enum RemoteMessage {
         case ping(Int32)
         case start(Bool)
         case imeBatchEdit(imeCounter: Int32, fieldCounter: Int32)
+        /// A text field got focus (show request) or the focused app reported its field.
+        case imeField(fieldCounter: Int32)
         case error
         case other
     }
@@ -238,6 +241,12 @@ enum RemoteMessage {
         if message.has(2) { return .setActive }
         if message.has(3) { return .error }
         if let ping = message.message(8) { return .ping(ping.int(1)) }
+        if let keyInject = message.message(20), let field = keyInject.message(2) {
+            return .imeField(fieldCounter: field.int(1))
+        }
+        if let show = message.message(22), let field = show.message(2) {
+            return .imeField(fieldCounter: field.int(1))
+        }
         if let batch = message.message(21) {
             return .imeBatchEdit(imeCounter: batch.int(1), fieldCounter: batch.int(2))
         }

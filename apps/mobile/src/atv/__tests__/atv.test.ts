@@ -168,7 +168,16 @@ describe('remote messages', () => {
     expect(parseRemoteMessage(PB.inImeKey)).toEqual({
       type: 'imeKeyInject',
       appPackage: 'com.netflix',
+      fieldCounter: undefined,
     });
     expect(parseRemoteMessage(PB.pingResponseMinus5)).toEqual({ type: 'other' });
+    expect(
+      parseRemoteMessage([178, 1, 12, 18, 10, 8, 4, 50, 6, 83, 101, 97, 114, 99, 104]),
+    ).toEqual({ type: 'imeShow', fieldCounter: 4 });
+    expect(
+      parseRemoteMessage([
+        162, 1, 19, 10, 13, 98, 11, 99, 111, 109, 46, 110, 101, 116, 102, 108, 105, 120, 18, 2, 8, 6,
+      ]),
+    ).toEqual({ type: 'imeKeyInject', appPackage: 'com.netflix', fieldCounter: 6 });
   });
 });
