@@ -52,7 +52,7 @@ The apps try MiLink first and fall back to the Android TV remote service, and re
 **Over the Android TV remote service**, the TV only acts on a limited set of keys, the same ones the Google TV app can send:
 
 - **Input source**: there's no input key, so the button opens a picker that switches straight to **HDMI 1, 2 or 3**, or opens **Settings** for the full list of inputs. The switch is a TV-input link (`content://android.media.tv/passthrough/…`) sent as an app-link request, with the input IDs MediaTek-based Mi TVs use. The input menu itself can't be opened this way: the service only passes plain links, and drops the connection on `intent:` links.
-- **Recent apps**: not available; the button is greyed out.
+- **Recent apps**: not available, so the button is greyed out. The service can't deliver the recent-apps key (the TV's `virtual-remote.kl`, which the service types through, has no entry for it), and recents is part of the system UI, so there's no link to open it either. Hold or double-press Home, All apps, Menu and hold OK were all tried on the MOOR2.
 - **macOS**: the pairing key is kept in your login keychain. After installing a new version, macOS may ask once for your password to let Mi Remote use it; choose **Always Allow** to keep the pairing.
 
 **Check your TV** (it must be on the same Wi-Fi as your computer):
