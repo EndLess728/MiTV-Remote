@@ -98,8 +98,7 @@ public class MiLinkModule: Module {
         self.connection = nil
         conn.stateUpdateHandler = nil
         conn.cancel()
-        var reachable = self.reachedPeer
-        if case .tls = error { reachable = true }
+        let reachable = self.reachedPeer || peerWasReachable(error)
         self.emitState("failed", error: error.localizedDescription, reachable: reachable)
       default:
         break
@@ -227,5 +226,22 @@ public class MiLinkModule: Module {
       }
     }
     conn.start(queue: queue)
+  }
+}
+
+/// Whether a connection error means something is listening on the port. Network.framework
+/// reports a TV that aborts the TLS handshake (an unpaired client certificate) as a TLS error or,
+/// often, as a plain reset; only refusals, timeouts and missing routes mean nobody's there.
+func peerWasReachable(_ error: NWError) -> Bool {
+  switch error {
+  case .tls:
+    return true
+  case .posix(let code):
+    let unreachable: Set<POSIXErrorCode> = [
+      .ECONNREFUSED, .ETIMEDOUT, .EHOSTUNREACH, .ENETUNREACH, .EHOSTDOWN, .ENETDOWN, .EADDRNOTAVAIL,
+    ]
+    return !unreachable.contains(code)
+  default:
+    return false
   }
 }

@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Security
 import XCTest
 @testable import MiRemote
@@ -105,5 +106,16 @@ final class ATVProtocolTests: XCTestCase {
         XCTAssertEqual(try DER.rsaPublicKey(der), rsa)
         XCTAssertTrue(SecKeyVerifySignature(publicKey, .rsaSignatureMessagePKCS1v15SHA256,
                                             Data(tbs) as CFData, signature as CFData, nil))
+    }
+
+    /// A TV rejecting an unpaired certificate often shows up as a reset, not a TLS error; that
+    /// must still count as "the service is there" so pairing starts.
+    func testClassifiesConnectionErrors() {
+        XCTAssertTrue(peerWasReachable(.posix(.ECONNRESET)))
+        XCTAssertTrue(peerWasReachable(.posix(.EPIPE)))
+        XCTAssertTrue(peerWasReachable(.tls(-9806)))
+        XCTAssertFalse(peerWasReachable(.posix(.ECONNREFUSED)))
+        XCTAssertFalse(peerWasReachable(.posix(.ETIMEDOUT)))
+        XCTAssertFalse(peerWasReachable(.posix(.EHOSTUNREACH)))
     }
 }

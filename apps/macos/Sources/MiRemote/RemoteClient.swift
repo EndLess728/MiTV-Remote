@@ -243,9 +243,7 @@ final class RemoteClient: ObservableObject {
             }
             receive()
         case .failed(let error), .waiting(let error):
-            var reachable = reachedPeer
-            if case .tls = error { reachable = true }
-            socketFailed(error.localizedDescription, reachable: reachable)
+            socketFailed(error.localizedDescription, reachable: reachedPeer || peerWasReachable(error))
         default:
             break
         }
@@ -254,12 +252,19 @@ final class RemoteClient: ObservableObject {
     /// `reachable`: TCP had connected, so something listens on that port.
     private func socketFailed(_ message: String, reachable: Bool) {
         let failedPhase = phase
+        let port: UInt16 = switch failedPhase {
+        case .milink: Self.milinkPort
+        case .atv: ATV.remotePort
+        case .pairing: ATV.pairingPort
+        case .none: 0
+        }
+        let detail = port == 0 ? message : "\(port): \(message)"
         closeSocket()
         stopRepeat(sendUp: false)
         switch failedPhase {
-        case .milink: milinkFailed(message, reachable: reachable)
-        case .atv: atvFailed(message, reachable: reachable)
-        case .pairing: pairingFailed(message, reachable: reachable)
+        case .milink: milinkFailed(detail, reachable: reachable)
+        case .atv: atvFailed(detail, reachable: reachable)
+        case .pairing: pairingFailed(detail, reachable: reachable)
         case .none: break
         }
     }
@@ -603,5 +608,22 @@ final class RemoteClient: ObservableObject {
             }
             delay += 0.04
         }
+    }
+}
+
+/// Whether a connection error means something is listening on the port. Network.framework
+/// reports a TV that aborts the TLS handshake (an unpaired client certificate) as a TLS error or,
+/// often, as a plain reset; only refusals, timeouts and missing routes mean nobody's there.
+func peerWasReachable(_ error: NWError) -> Bool {
+    switch error {
+    case .tls:
+        return true
+    case .posix(let code):
+        let unreachable: Set<POSIXErrorCode> = [
+            .ECONNREFUSED, .ETIMEDOUT, .EHOSTUNREACH, .ENETUNREACH, .EHOSTDOWN, .ENETDOWN, .EADDRNOTAVAIL,
+        ]
+        return !unreachable.contains(code)
+    default:
+        return false
     }
 }
