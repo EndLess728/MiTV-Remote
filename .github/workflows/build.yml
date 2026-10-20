@@ -106,6 +106,8 @@ jobs:
             echo "::error title=swift test failures::$(grep -E 'error:|failed|Timed out|XCTAssert|fatal' "$RUNNER_TEMP/swift-test.log" | head -40 | enc)"
             echo "::error title=fake TV log::$(tail -60 "$RUNNER_TEMP/fake-tv.log" | enc)"
           fi
+          enc() { python -c 'import sys; print(sys.stdin.read()[-6000:].replace("%","%25").replace("\r","").replace("\n","%0A"))'; }
+          echo "::notice title=swift test summary::$(grep -E "Test Case .*(passed|failed|skipped)|Executed [0-9]+ test" "$RUNNER_TEMP/swift-test.log" | tail -30 | enc)"
           exit $status
 
       - name: Fake TV log
