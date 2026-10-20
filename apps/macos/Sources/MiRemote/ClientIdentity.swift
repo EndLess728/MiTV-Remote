@@ -2,14 +2,19 @@ import Foundation
 import Security
 
 /// The RSA key and self-signed certificate Mi Remote presents to Android TVs. The TV trusts the
-/// certificate once paired, so both live in the login keychain, which pairs them into the TLS
-/// identity. macOS can't create certificates, so `DER` builds it and this signs it.
+/// certificate once paired, so both persist: the private key in the login keychain, the
+/// certificate (public data) in Application Support. `SecIdentityCreateWithCertificate` joins
+/// them into the TLS identity. macOS can't create certificates, so `DER` builds it and this
+/// signs it.
+///
+/// (An earlier version stored the certificate in the keychain too and looked the identity up by
+/// label; on the login keychain that lookup came back empty, so no client certificate was sent.)
 ///
 /// The app is ad-hoc signed, so after an update macOS may ask once whether Mi Remote may use
 /// its own keychain key; "Always Allow" keeps the pairing.
 enum ClientIdentity {
     private static let keyLabel = "Mi Remote client key"
-    private static let certLabel = "Mi Remote client certificate"
+    private static let keyTag = Data("local.miremote.client-key".utf8)
 
     enum Failure: LocalizedError {
         case keychain(OSStatus)
@@ -40,62 +45,45 @@ enum ClientIdentity {
         return publicKey
     }
 
-    /// The keychain identity (stored key + stored certificate), for TLS client authentication.
-    static func identity() -> SecIdentity? {
-        guard let wanted = certificate() else { return nil }
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassIdentity,
-            kSecMatchLimit as String: kSecMatchLimitAll,
-            kSecReturnRef as String: true,
-        ]
-        var items: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &items) == errSecSuccess,
-              let identities = items as? [SecIdentity] else { return nil }
-        for identity in identities {
-            var cert: SecCertificate?
-            if SecIdentityCopyCertificate(identity, &cert) == errSecSuccess, let cert,
-               [UInt8](SecCertificateCopyData(cert) as Data) == wanted {
-                return identity
-            }
+    /// The TLS client identity: the stored certificate joined with its private key in the
+    /// keychain. Throws with the reason when that fails, so it shows up in the app.
+    static func identity() throws -> SecIdentity {
+        guard let der = certificate(),
+              let cert = SecCertificateCreateWithData(nil, Data(der) as CFData) else {
+            throw Failure.security("No client certificate yet")
         }
-        return nil
+        var identity: SecIdentity?
+        let status = SecIdentityCreateWithCertificate(nil, cert, &identity)
+        guard status == errSecSuccess, let identity else { throw Failure.keychain(status) }
+        return identity
     }
 
-    // MARK: Keychain
+    // MARK: Storage
 
-    private static func certificate() -> [UInt8]? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassCertificate,
-            kSecAttrLabel as String: certLabel,
-            kSecReturnData as String: true,
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return [UInt8](data)
+    private static var certificateURL: URL {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Mi Remote", isDirectory: true)
+        return dir.appendingPathComponent("client-certificate.der")
+    }
+
+    static func certificate() -> [UInt8]? {
+        (try? Data(contentsOf: certificateURL)).map { [UInt8]($0) }
     }
 
     private static func setCertificate(_ der: Data) throws {
-        guard let cert = SecCertificateCreateWithData(nil, der as CFData) else {
+        guard SecCertificateCreateWithData(nil, der as CFData) != nil else {
             throw Failure.security("Not a valid certificate")
         }
-        deleteCertificate()
-        let status = SecItemAdd([
-            kSecClass as String: kSecClassCertificate,
-            kSecValueRef as String: cert,
-            kSecAttrLabel as String: certLabel,
-        ] as CFDictionary, nil)
-        guard status == errSecSuccess else { throw Failure.keychain(status) }
+        try FileManager.default.createDirectory(at: certificateURL.deletingLastPathComponent(),
+                                                withIntermediateDirectories: true)
+        try der.write(to: certificateURL, options: .atomic)
     }
 
     private static func deleteCertificate() {
-        SecItemDelete([
-            kSecClass as String: kSecClassCertificate,
-            kSecAttrLabel as String: certLabel,
-        ] as CFDictionary)
+        try? FileManager.default.removeItem(at: certificateURL)
     }
 
-    private static func publicKeyData(_ key: SecKey) throws -> [UInt8] {
+    static func publicKeyData(_ key: SecKey) throws -> [UInt8] {
         guard let pub = SecKeyCopyPublicKey(key) else { throw Failure.security("No public key") }
         var error: Unmanaged<CFError>?
         guard let data = SecKeyCopyExternalRepresentation(pub, &error) as Data? else {
@@ -112,18 +100,22 @@ enum ClientIdentity {
         return signature
     }
 
-    private static func privateKey() throws -> SecKey {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassKey,
-            kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
-            kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
-            kSecAttrLabel as String: keyLabel,
-            kSecReturnRef as String: true,
-        ]
-        var item: CFTypeRef?
-        if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let item,
-           CFGetTypeID(item) == SecKeyGetTypeID() {
-            return (item as! SecKey) // swiftlint:disable:this force_cast
+    static func privateKey() throws -> SecKey {
+        // Found by tag; by label too, for keys made before the tag was added.
+        let lookups: [(String, Any)] = [(kSecAttrApplicationTag as String, keyTag), (kSecAttrLabel as String, keyLabel)]
+        for (attribute, value) in lookups {
+            let query: [String: Any] = [
+                kSecClass as String: kSecClassKey,
+                kSecAttrKeyClass as String: kSecAttrKeyClassPrivate,
+                kSecAttrKeyType as String: kSecAttrKeyTypeRSA,
+                attribute: value,
+                kSecReturnRef as String: true,
+            ]
+            var item: CFTypeRef?
+            if SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess, let item,
+               CFGetTypeID(item) == SecKeyGetTypeID() {
+                return (item as! SecKey) // swiftlint:disable:this force_cast
+            }
         }
         // A certificate for an older key would never match a new one.
         deleteCertificate()
@@ -134,6 +126,7 @@ enum ClientIdentity {
             kSecPrivateKeyAttrs as String: [
                 kSecAttrIsPermanent as String: true,
                 kSecAttrLabel as String: keyLabel,
+                kSecAttrApplicationTag as String: keyTag,
             ],
         ]
         var error: Unmanaged<CFError>?

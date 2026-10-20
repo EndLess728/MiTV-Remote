@@ -251,8 +251,13 @@ final class RemoteClient: ObservableObject {
         // handshake against it fails or stalls; native clients that work with Xiaomi TVs pin 1.2.
         sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv12)
         sec_protocol_options_set_max_tls_protocol_version(sec, .TLSv12)
-        if let identity = ClientIdentity.identity(), let secIdentity = sec_identity_create(identity) {
-            sec_protocol_options_set_local_identity(sec, secIdentity)
+        do {
+            if let secIdentity = sec_identity_create(try ClientIdentity.identity()) {
+                sec_protocol_options_set_local_identity(sec, secIdentity)
+            }
+        } catch {
+            // Without it the TV refuses the connection; say why instead of failing obscurely.
+            lastError = "Client certificate unavailable: \(error.localizedDescription)"
         }
         sec_protocol_options_set_verify_block(sec, { [weak self] _, trust, complete in
             let secTrust = sec_trust_copy_ref(trust).takeRetainedValue()
