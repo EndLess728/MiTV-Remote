@@ -63,6 +63,7 @@ final class ATVProtocolTests: XCTestCase {
         XCTAssertEqual(RemoteMessage.imeBatchEdit(imeCounter: 3, fieldCounter: 7, text: "héllo"), [170, 1, 22, 8, 3, 16, 7, 26, 16, 8, 1, 18, 12, 8, 5, 16, 5, 26, 6, 104, 195, 169, 108, 108, 111])
         XCTAssertEqual(RemoteMessage.configure(features: 615), [10, 50, 8, 231, 4, 18, 45, 10, 9, 77, 105, 32, 82, 101, 109, 111, 116, 101, 18, 9, 77, 105, 32, 82, 101, 109, 111, 116, 101, 24, 1, 34, 1, 49, 42, 9, 97, 116, 118, 114, 101, 109, 111, 116, 101, 50, 5, 49, 46, 48, 46, 48])
         XCTAssertEqual(RemoteMessage.wantedFeatures, 615)
+        XCTAssertEqual(RemoteMessage.appLink("content://x"), [210, 5, 13, 10, 11, 99, 111, 110, 116, 101, 110, 116, 58, 47, 47, 120])
     }
 
     func testParsesRemoteMessages() throws {

@@ -198,6 +198,11 @@ def handle_remote(conn: SSL.Connection, args: argparse.Namespace) -> None:
             session.send(ping)
         elif msg.HasField("remote_ping_response"):
             log("remote: ping answered", msg.remote_ping_response.val1)
+        elif msg.HasField("remote_app_link_launch_request"):
+            link = msg.remote_app_link_launch_request.app_link
+            log("remote: open link", link)
+            with open(args.keys_file, "a") as f:
+                f.write(f"link {link}\n")
         elif msg.HasField("remote_ime_batch_edit"):
             edit = msg.remote_ime_batch_edit
             for info in edit.edit_info:
