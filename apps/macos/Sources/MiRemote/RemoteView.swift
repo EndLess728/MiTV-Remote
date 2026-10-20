@@ -20,6 +20,9 @@ struct RemoteView: View {
     @StateObject private var discovery = TVDiscovery()
     @AppStorage("tvHost") private var savedHost = ""
     @State private var showConnect = false
+    /// Android TV Remote ignores the input-source and recent-apps keys; these panels try
+    /// alternatives so a tester can tell us which one their TV responds to (#4).
+    @State private var keyTest: KeyTest?
     @State private var text = ""
     @FocusState private var remoteFocused: Bool
     @FocusState private var textFocused: Bool
@@ -98,6 +101,15 @@ struct RemoteView: View {
                         .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Palette.bodyEdge))
                         .padding(14)
                 }
+            } else if let test = keyTest {
+                ZStack {
+                    Color.black.opacity(0.55)
+                        .onTapGesture { keyTest = nil }
+                    KeyTestSheet(client: client, test: test) { keyTest = nil }
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.body))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Palette.bodyEdge))
+                        .padding(14)
+                }
             }
         }
     }
@@ -146,9 +158,13 @@ struct RemoteView: View {
         HStack {
             RoundKey(symbol: "power", tint: Palette.power, help: "Power (P)") { client.press(.power) }
             Spacer()
-            RoundKey(symbol: "rectangle.on.rectangle", help: "Input source") { client.press(.tvInput) }
+            RoundKey(symbol: "rectangle.on.rectangle", help: "Input source") {
+                if client.tvProtocol == .atv { keyTest = .inputSource } else { client.press(.tvInput) }
+            }
             Spacer()
-            RoundKey(symbol: "square.stack", help: "Recent apps") { client.press(.appSwitch) }
+            RoundKey(symbol: "square.stack", help: "Recent apps") {
+                if client.tvProtocol == .atv { keyTest = .recentApps } else { client.press(.appSwitch) }
+            }
             Spacer()
             RoundKey(symbol: "gearshape.fill", help: "Settings") { client.press(.settings) }
         }
@@ -241,7 +257,7 @@ struct RemoteView: View {
     // MARK: Keyboard
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
-        if textFocused || press.modifiers.contains(.command) || client.state == .pairing { return .ignored }
+        if textFocused || press.modifiers.contains(.command) || client.state == .pairing || keyTest != nil { return .ignored }
         switch press.key {
         case .upArrow: client.press(.dpadUp)
         case .downArrow: client.press(.dpadDown)
@@ -626,5 +642,104 @@ struct PairSheet: View {
     private func submit() {
         guard valid, !verifying else { return }
         client.submitPairingCode(code)
+    }
+}
+
+// MARK: - Key test sheet
+
+/// Which button's alternatives a `KeyTestSheet` offers.
+enum KeyTest: Identifiable {
+    case inputSource
+    case recentApps
+
+    var id: Self { self }
+}
+
+/// Over Android TV Remote the TV ignores the input-source (178) and recent-apps (187) keys, and
+/// which alternative a given TV responds to isn't documented. This lists candidates to try one
+/// at a time; the one that works becomes the button.
+struct KeyTestSheet: View {
+    @ObservedObject var client: RemoteClient
+    var test: KeyTest
+    var onClose: () -> Void
+    @State private var lastTried: String?
+
+    private struct Candidate: Identifiable {
+        var name: String
+        var detail: String
+        var send: (RemoteClient) -> Void
+        var id: String { name }
+    }
+
+    private static func key(_ name: String, _ code: Int32) -> Candidate {
+        Candidate(name: name, detail: "key \(code)") { $0.press(code: code) }
+    }
+
+    private var title: String {
+        test == .inputSource ? "Find the input source button" : "Find the recent apps button"
+    }
+
+    private var candidates: [Candidate] {
+        switch test {
+        case .inputSource:
+            return [
+                Self.key("Input", 178),
+                Self.key("TV", 170),
+                Self.key("HDMI 1", 243),
+                Self.key("HDMI 2", 244),
+                Self.key("HDMI 3", 245),
+                Self.key("HDMI 4", 246),
+                Self.key("Guide", 172),
+                Self.key("Settings", 176),
+            ] + (1...12).map { Self.key("F\($0)", 130 + Int32($0)) }
+        case .recentApps:
+            return [
+                Self.key("Recents", 187),
+                Candidate(name: "Hold Home", detail: "long press 3") { $0.longPress(code: 3) },
+                Candidate(name: "Home ×2", detail: "double press 3") { $0.doublePress(code: 3) },
+                Self.key("All apps", 284),
+                Self.key("Menu", 82),
+                Candidate(name: "Hold OK", detail: "long press 23") { $0.longPress(code: 23) },
+            ]
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(title)
+                .font(.headline)
+            Text("This TV ignores the usual key for this over the Android TV remote service. Try these one at a time and watch the TV; please tell us in issue #4 which one worked, and we'll make it the button.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 4), spacing: 6) {
+                ForEach(candidates) { candidate in
+                    Button {
+                        candidate.send(client)
+                        lastTried = "\(candidate.name) (\(candidate.detail))"
+                    } label: {
+                        Text(candidate.name)
+                            .font(.system(size: 11, weight: .semibold))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                            .frame(maxWidth: .infinity, minHeight: 30)
+                    }
+                    .buttonStyle(KeyStyle(shape: RoundedRectangle(cornerRadius: 8, style: .continuous), fill: Palette.key))
+                    .help(candidate.detail)
+                }
+            }
+            if let lastTried {
+                Text("Sent: \(lastTried)")
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+            }
+            HStack {
+                Spacer()
+                Button("Done", action: onClose)
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(18)
     }
 }

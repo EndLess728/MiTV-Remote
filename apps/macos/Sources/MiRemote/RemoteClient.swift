@@ -599,6 +599,24 @@ final class RemoteClient: ObservableObject {
     /// Single press: DOWN followed by UP.
     func press(_ key: AndroidKey) { press(code: key.rawValue) }
 
+    /// Android TV Remote: holds a key for `seconds` (a long press), e.g. Home.
+    func longPress(code: Int32, seconds: Double = 1.0) {
+        guard state == .connected, phase == .atv else { return }
+        sendDelimited(RemoteMessage.keyInject(code: code, direction: .startLong))
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
+            guard let self, self.state == .connected, self.phase == .atv else { return }
+            self.sendDelimited(RemoteMessage.keyInject(code: code, direction: .endLong))
+        }
+    }
+
+    /// Two quick presses of the same key.
+    func doublePress(code: Int32) {
+        press(code: code)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
+            self?.press(code: code)
+        }
+    }
+
     func press(code: Int32, meta: Int32 = 0) {
         if phase == .atv {
             sendAtvKey(code)
