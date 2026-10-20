@@ -57,6 +57,8 @@ final class RemoteClient: ObservableObject {
     @Published private(set) var pairingStep: PairingStep?
     @Published private(set) var pairingError: PairingError?
     @Published private(set) var tvProtocol: TVProtocol?
+    /// The last connection error, with the port, for the status line and the pairing sheet.
+    @Published private(set) var lastError: String?
 
     private(set) var host: String = ""
     private var wantConnected = false
@@ -66,6 +68,8 @@ final class RemoteClient: ObservableObject {
     private enum Phase { case none, milink, atv, pairing }
     private var phase: Phase = .none
     private var connection: NWConnection?
+    /// Plain TCP connection made before a TLS one, to learn whether the port is open at all.
+    private var probe: NWConnection?
     private var reachedPeer = false
     private var peerCertificate: [UInt8]?
 
@@ -150,7 +154,7 @@ final class RemoteClient: ObservableObject {
         reconnectWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             Task { @MainActor in
-                guard let self, self.wantConnected, self.connection == nil else { return }
+                guard let self, self.wantConnected, self.connection == nil, self.probe == nil else { return }
                 self.open()
             }
         }
@@ -180,14 +184,55 @@ final class RemoteClient: ObservableObject {
         atvBuffer.removeAll()
         reachedPeer = false
         peerCertificate = nil
+        if state != .pairing { state = .connecting }
+        if tls {
+            probePort(nwPort)
+        } else {
+            startConnection(nwPort, tls: false)
+        }
+    }
+
+    /// Connects plain TCP first and only then TLS, the way the Android app does. A TV that
+    /// rejects an unpaired certificate, or stalls the TLS handshake, can surface as a reset or a
+    /// timeout, which on its own reads like "nothing listens here". Knowing TCP got through
+    /// makes any later failure mean "the service is there", so pairing starts.
+    private func probePort(_ port: NWEndpoint.Port) {
+        let tcp = NWProtocolTCP.Options()
+        tcp.connectionTimeout = 4
+        let conn = NWConnection(host: NWEndpoint.Host(host), port: port, using: NWParameters(tls: nil, tcp: tcp))
+        probe = conn
+        conn.stateUpdateHandler = { [weak self, weak conn] newState in
+            Task { @MainActor in
+                guard let self, let conn, conn === self.probe else { return }
+                switch newState {
+                case .ready:
+                    conn.stateUpdateHandler = nil
+                    conn.cancel()
+                    self.probe = nil
+                    self.reachedPeer = true
+                    self.startConnection(port, tls: true)
+                case .failed(let error), .waiting(let error):
+                    conn.stateUpdateHandler = nil
+                    conn.cancel()
+                    self.probe = nil
+                    self.socketFailed(error.localizedDescription, reachable: false)
+                default:
+                    break
+                }
+            }
+        }
+        conn.start(queue: .main)
+    }
+
+    private func startConnection(_ port: NWEndpoint.Port, tls: Bool) {
         let tcp = NWProtocolTCP.Options()
         tcp.noDelay = true
-        tcp.connectionTimeout = 4
+        // TLS gets longer: on first use the keychain may ask before the client key can sign.
+        tcp.connectionTimeout = tls ? 10 : 4
         tcp.enableKeepalive = true
-        let conn = NWConnection(host: NWEndpoint.Host(host), port: nwPort,
+        let conn = NWConnection(host: NWEndpoint.Host(host), port: port,
                                 using: NWParameters(tls: tls ? tlsOptions() : nil, tcp: tcp))
         connection = conn
-        if state != .pairing { state = .connecting }
         conn.stateUpdateHandler = { [weak self, weak conn] newState in
             Task { @MainActor in
                 guard let self, let conn, conn === self.connection else { return }
@@ -202,7 +247,10 @@ final class RemoteClient: ObservableObject {
     private func tlsOptions() -> NWProtocolTLS.Options {
         let options = NWProtocolTLS.Options()
         let sec = options.securityProtocolOptions
+        // TLS 1.2 only. The TV's remote service (Netty) is a TLS 1.2 server, and Apple's TLS 1.3
+        // handshake against it fails or stalls; native clients that work with Xiaomi TVs pin 1.2.
         sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv12)
+        sec_protocol_options_set_max_tls_protocol_version(sec, .TLSv12)
         if let identity = ClientIdentity.identity(), let secIdentity = sec_identity_create(identity) {
             sec_protocol_options_set_local_identity(sec, secIdentity)
         }
@@ -220,6 +268,9 @@ final class RemoteClient: ObservableObject {
     }
 
     private func closeSocket() {
+        probe?.stateUpdateHandler = nil
+        probe?.cancel()
+        probe = nil
         heartbeat?.invalidate()
         heartbeat = nil
         idleTimer?.invalidate()
@@ -259,6 +310,7 @@ final class RemoteClient: ObservableObject {
         case .none: 0
         }
         let detail = port == 0 ? message : "\(port): \(message)"
+        lastError = detail
         closeSocket()
         stopRepeat(sendUp: false)
         switch failedPhase {
@@ -307,6 +359,7 @@ final class RemoteClient: ObservableObject {
 
     private func milinkConnected() {
         state = .connected
+        lastError = nil
         if tvProtocol != .milink { remember(.milink) }
         heartbeat?.invalidate()
         heartbeat = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -444,6 +497,7 @@ final class RemoteClient: ObservableObject {
         if tvProtocol != .atv { remember(.atv) }
         state = .connected
         lastAckMs = nil
+        lastError = nil
         pairingStep = nil
         pairingError = nil
     }
@@ -495,13 +549,10 @@ final class RemoteClient: ObservableObject {
         sendDelimited(Pairing.request(clientName: ATV.clientName))
     }
 
+    /// Stays on the pairing sheet with the error, rather than silently starting over.
     private func pairingFailed(_ message: String, reachable: Bool) {
-        if !reachable {
-            state = .failed(message)
-            pairingStep = nil
-            scheduleReconnect()
-            return
-        }
+        state = .pairing
+        pairingStep = .starting
         pairingError = .connection
     }
 

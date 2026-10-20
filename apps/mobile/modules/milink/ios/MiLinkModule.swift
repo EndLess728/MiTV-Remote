@@ -7,6 +7,8 @@ import Network
 public class MiLinkModule: Module {
   private let queue = DispatchQueue(label: "expo.modules.milink")
   private var connection: NWConnection?
+  /// Plain TCP connection made before a TLS one, to learn whether the port is open at all.
+  private var probe: NWConnection?
   /// Whether the current connection got past TCP (so a failure means the service exists).
   private var reachedPeer = false
   private var peerCertificate: Data?
@@ -72,19 +74,56 @@ public class MiLinkModule: Module {
   private func open(host: String, port: Int, tls: Bool) {
     close()
     guard let nwPort = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { return }
-    let tcp = NWProtocolTCP.Options()
-    tcp.noDelay = true
-    tcp.connectionTimeout = 4
-    tcp.enableKeepalive = true
     reachedPeer = false
     peerCertificate = nil
+    emitState("connecting")
+    if tls {
+      probePort(host: host, port: nwPort)
+    } else {
+      startConnection(host: host, port: nwPort, tls: false)
+    }
+  }
+
+  /// Connects plain TCP first and only then TLS, as the Android module does. A TV that rejects
+  /// an unpaired certificate, or stalls the TLS handshake, can surface as a reset or a timeout,
+  /// which on its own reads like "nothing listens here".
+  private func probePort(host: String, port: NWEndpoint.Port) {
+    let tcp = NWProtocolTCP.Options()
+    tcp.connectionTimeout = 4
+    let conn = NWConnection(host: NWEndpoint.Host(host), port: port, using: NWParameters(tls: nil, tcp: tcp))
+    probe = conn
+    conn.stateUpdateHandler = { [weak self, weak conn] state in
+      guard let self, let conn, conn === self.probe else { return }
+      switch state {
+      case .ready:
+        conn.stateUpdateHandler = nil
+        conn.cancel()
+        self.probe = nil
+        self.reachedPeer = true
+        self.startConnection(host: host, port: port, tls: true)
+      case .waiting(let error), .failed(let error):
+        conn.stateUpdateHandler = nil
+        conn.cancel()
+        self.probe = nil
+        self.emitState("failed", error: error.localizedDescription, reachable: false)
+      default:
+        break
+      }
+    }
+    conn.start(queue: queue)
+  }
+
+  private func startConnection(host: String, port nwPort: NWEndpoint.Port, tls: Bool) {
+    let tcp = NWProtocolTCP.Options()
+    tcp.noDelay = true
+    tcp.connectionTimeout = tls ? 10 : 4
+    tcp.enableKeepalive = true
     let conn = NWConnection(
       host: NWEndpoint.Host(host),
       port: nwPort,
       using: NWParameters(tls: tls ? tlsOptions() : nil, tcp: tcp)
     )
     connection = conn
-    emitState("connecting")
     conn.stateUpdateHandler = { [weak self, weak conn] state in
       guard let self, let conn, conn === self.connection else { return }
       switch state {
@@ -112,7 +151,10 @@ public class MiLinkModule: Module {
   private func tlsOptions() -> NWProtocolTLS.Options {
     let options = NWProtocolTLS.Options()
     let sec = options.securityProtocolOptions
+    // TLS 1.2 only. The TV's remote service (Netty) is a TLS 1.2 server, and Apple's TLS 1.3
+    // handshake against it fails or stalls; native clients that work with Xiaomi TVs pin 1.2.
     sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv12)
+    sec_protocol_options_set_max_tls_protocol_version(sec, .TLSv12)
     if let identity = ClientIdentity.identity(), let secIdentity = sec_identity_create(identity) {
       sec_protocol_options_set_local_identity(sec, secIdentity)
     }
@@ -144,6 +186,9 @@ public class MiLinkModule: Module {
   }
 
   private func close() {
+    probe?.stateUpdateHandler = nil
+    probe?.cancel()
+    probe = nil
     guard let conn = connection else { return }
     connection = nil
     conn.stateUpdateHandler = nil

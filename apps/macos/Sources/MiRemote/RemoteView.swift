@@ -581,6 +581,13 @@ struct PairSheet: View {
                     .foregroundStyle(Palette.power)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            if client.pairingError != nil, let detail = client.lastError {
+                Text(detail)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(.secondary)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             if canRetry {
                 Button("Try again") { client.retryPairing() }

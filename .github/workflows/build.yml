@@ -79,8 +79,28 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run unit tests
+      # A stand-in Android TV (Tests/fake_tv.py) for the end-to-end pairing test.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Start fake Android TV
+        run: |
+          python -m pip install --quiet androidtvremote2 pyopenssl
+          python Tests/fake_tv.py --code-file "$RUNNER_TEMP/tv-code" --keys-file "$RUNNER_TEMP/tv-keys" \
+            > "$RUNNER_TEMP/fake-tv.log" 2>&1 &
+          for i in $(seq 1 20); do nc -z 127.0.0.1 6466 && nc -z 127.0.0.1 6467 && exit 0; sleep 0.5; done
+          cat "$RUNNER_TEMP/fake-tv.log"; exit 1
+
+      - name: Run tests
+        env:
+          MIREMOTE_FAKE_TV_CODE: ${{ runner.temp }}/tv-code
+          MIREMOTE_FAKE_TV_KEYS: ${{ runner.temp }}/tv-keys
         run: swift test
+
+      - name: Fake TV log
+        if: always()
+        run: cat "$RUNNER_TEMP/fake-tv.log" || true
 
       - name: Build universal app
         run: UNIVERSAL=1 ./build-app.sh

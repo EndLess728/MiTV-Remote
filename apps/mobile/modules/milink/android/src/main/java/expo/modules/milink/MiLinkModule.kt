@@ -119,6 +119,8 @@ class MiLinkModule : Module() {
         try {
           val ssl = identity.socketFactory().createSocket(plain, host, port, true) as SSLSocket
           s = ssl
+          // TLS 1.2 only, matching the TV's remote service (and the Apple clients).
+          ssl.enabledProtocols = arrayOf("TLSv1.2")
           ssl.soTimeout = 6000
           ssl.startHandshake()
           ssl.soTimeout = 0
