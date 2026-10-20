@@ -109,6 +109,8 @@ export default function RemoteScreen(): React.JSX.Element {
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const status = useConnectionStore((s) => s.status);
+  // The Android TV Remote service has no recent-apps key (see atvKey in the client).
+  const atv = useConnectionStore((s) => s.protocol === 'atv');
   const pathname = usePathname();
 
   // Android TVs without MiLink need a one-time pairing code; ask for it when the client does.
@@ -152,6 +154,7 @@ export default function RemoteScreen(): React.JSX.Element {
           <RemoteKey accessibilityLabel={t('remote.input')} icon="tv-outline" keyName="tvInput" />
           <RemoteKey
             accessibilityLabel={t('remote.apps')}
+            disabled={atv}
             icon="apps-outline"
             keyName="appSwitch"
           />

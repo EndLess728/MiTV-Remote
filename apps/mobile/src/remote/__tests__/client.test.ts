@@ -140,10 +140,34 @@ describe('RemoteClient', () => {
     remote.press('dpadUp');
     expect(sentMessages()).toEqual([delimited(keyInject(19, Direction.short))]);
 
+    // Input source opens Settings; recent apps isn't sent (the service ignores both keys).
+    mockNative.send.mockClear();
+    remote.press('tvInput');
+    remote.press('appSwitch');
+    expect(sentMessages()).toEqual([delimited(keyInject(176, Direction.short))]);
+
     // Text goes in as an IME edit even before the TV has sent IME counters.
     mockNative.send.mockClear();
     remote.type('Hi');
     expect(sentMessages()).toEqual([delimited(imeBatchEdit(0, 0, 'Hi'))]);
+  });
+
+  it('keeps a failed pairing on screen with the error instead of starting over', async () => {
+    useSettingsStore.getState().setTvProtocol('192.168.1.54', 'atv');
+    remote.connect('192.168.1.54');
+    await flush();
+    mockNative.emitState({ state: 'failed', error: 'handshake failure', reachable: true });
+    await flush();
+    expect(mockNative.connect).toHaveBeenLastCalledWith('192.168.1.54', ATV_PAIRING_PORT, true);
+    mockNative.connect.mockClear();
+    mockNative.emitState({ state: 'failed', error: 'handshake failure', reachable: true });
+    await flush();
+    expect(useConnectionStore.getState()).toMatchObject({
+      status: 'pairing',
+      pairingError: 'connection',
+      error: '6467: handshake failure',
+    });
+    expect(mockNative.connect).not.toHaveBeenCalled();
   });
 
   it('goes straight to Android TV Remote for a TV known to use it', async () => {

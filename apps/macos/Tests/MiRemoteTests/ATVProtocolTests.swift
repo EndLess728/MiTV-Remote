@@ -110,6 +110,13 @@ final class ATVProtocolTests: XCTestCase {
                                             Data(tbs) as CFData, signature as CFData, nil))
     }
 
+    @MainActor
+    func testMapsKeysTheAndroidTVServiceIgnores() {
+        XCTAssertEqual(RemoteClient.atvKey(for: AndroidKey.tvInput.rawValue), AndroidKey.settings.rawValue)
+        XCTAssertNil(RemoteClient.atvKey(for: AndroidKey.appSwitch.rawValue))
+        XCTAssertEqual(RemoteClient.atvKey(for: AndroidKey.home.rawValue), AndroidKey.home.rawValue)
+    }
+
     /// A TV rejecting an unpaired certificate often shows up as a reset, not a TLS error; that
     /// must still count as "the service is there" so pairing starts.
     func testClassifiesConnectionErrors() {

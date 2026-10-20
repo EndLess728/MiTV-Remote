@@ -80,6 +80,7 @@ export default function PairScreen(): React.JSX.Element {
   const host = useConnectionStore((s) => s.host);
   const step = useConnectionStore((s) => s.pairingStep);
   const error = useConnectionStore((s) => s.pairingError);
+  const detail = useConnectionStore((s) => s.error);
 
   useEffect(() => {
     if (status === 'connected') router.back();
@@ -142,6 +143,11 @@ export default function PairScreen(): React.JSX.Element {
       {!waiting && !canRetry ? <CodeEntry verifying={verifying} /> : null}
 
       {errorText ? <Text style={[TextStyles.bodySmall, styles.error]}>{errorText}</Text> : null}
+      {errorText && detail ? (
+        <Text selectable style={[TextStyles.caption, styles.dim]}>
+          {detail}
+        </Text>
+      ) : null}
 
       {canRetry ? (
         <Pressable

@@ -477,12 +477,15 @@ class RemoteClient {
     }
     if (state !== 'failed') return;
     this.phase = 'none';
-    if (!reachable) {
-      setState({ status: 'failed', error, pairingStep: undefined });
-      this.scheduleReconnect();
-      return;
-    }
-    setState({ error, pairingError: 'connection' });
+    // Stay on the pairing screen with the error (and a retry), rather than silently starting
+    // over, which hid why pairing failed (#4).
+    const detail = `${ATV_PAIRING_PORT}: ${error ?? (reachable ? 'connection lost' : 'unreachable')}`;
+    setState({
+      status: 'pairing',
+      pairingStep: 'starting',
+      error: detail,
+      pairingError: 'connection',
+    });
   }
 
   private handlePairingMessage(bytes: Bytes): void {
@@ -529,7 +532,8 @@ class RemoteClient {
 
   private pressCode(code: number, meta = 0): void {
     if (this.phase === 'atv') {
-      this.sendAtvKey(code);
+      const mapped = atvKey(code);
+      if (mapped !== null) this.sendAtvKey(mapped);
     } else {
       this.sendMiLinkKey(code, ACTION_DOWN, meta);
       this.sendMiLinkKey(code, ACTION_UP, meta);
@@ -580,6 +584,17 @@ class RemoteClient {
       delay += TYPE_INTERVAL_MS;
     }
   }
+}
+
+/**
+ * The Android TV Remote service ignores keys outside a supported set, including the input-source
+ * and recent-apps keys (tested on a MiTV-MOOR2, #4). Input source opens Settings instead, where
+ * the TV's inputs are; recent apps has no equivalent, so it returns null.
+ */
+export function atvKey(code: number): number | null {
+  if (code === AndroidKey.tvInput) return AndroidKey.settings;
+  if (code === AndroidKey.appSwitch) return null;
+  return code;
 }
 
 function sameBytes(a: Bytes, b: Bytes): boolean {

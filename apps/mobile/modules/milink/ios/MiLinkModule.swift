@@ -78,6 +78,13 @@ public class MiLinkModule: Module {
     peerCertificate = nil
     emitState("connecting")
     if tls {
+      // Without a client certificate the TV refuses the session; say so instead of trying.
+      do {
+        _ = try ClientIdentity.identity()
+      } catch {
+        emitState("failed", error: "Client certificate unavailable: \(error.localizedDescription)", reachable: true)
+        return
+      }
       probePort(host: host, port: nwPort)
     } else {
       startConnection(host: host, port: nwPort, tls: false)
@@ -155,7 +162,7 @@ public class MiLinkModule: Module {
     // handshake against it fails or stalls; native clients that work with Xiaomi TVs pin 1.2.
     sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv12)
     sec_protocol_options_set_max_tls_protocol_version(sec, .TLSv12)
-    if let identity = ClientIdentity.identity(), let secIdentity = sec_identity_create(identity) {
+    if let identity = try? ClientIdentity.identity(), let secIdentity = sec_identity_create(identity) {
       sec_protocol_options_set_local_identity(sec, secIdentity)
     }
     sec_protocol_options_set_verify_block(sec, { [weak self] _, trust, complete in

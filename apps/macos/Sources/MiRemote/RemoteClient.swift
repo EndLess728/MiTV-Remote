@@ -509,6 +509,17 @@ final class RemoteClient: ObservableObject {
         pairingError = nil
     }
 
+    /// The Android TV Remote service ignores keys outside a supported set, including the
+    /// input-source and recent-apps keys (tested on a MiTV-MOOR2, #4). Input source opens
+    /// Settings instead, where the TV's inputs are; recent apps has no equivalent.
+    static func atvKey(for code: Int32) -> Int32? {
+        switch code {
+        case AndroidKey.tvInput.rawValue: return AndroidKey.settings.rawValue
+        case AndroidKey.appSwitch.rawValue: return nil
+        default: return code
+        }
+    }
+
     private func sendAtvKey(_ code: Int32) {
         guard state == .connected, phase == .atv else { return }
         sendDelimited(RemoteMessage.keyInject(code: code, direction: .short))
@@ -599,27 +610,9 @@ final class RemoteClient: ObservableObject {
     /// Single press: DOWN followed by UP.
     func press(_ key: AndroidKey) { press(code: key.rawValue) }
 
-    /// Android TV Remote: holds a key for `seconds` (a long press), e.g. Home.
-    func longPress(code: Int32, seconds: Double = 1.0) {
-        guard state == .connected, phase == .atv else { return }
-        sendDelimited(RemoteMessage.keyInject(code: code, direction: .startLong))
-        DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
-            guard let self, self.state == .connected, self.phase == .atv else { return }
-            self.sendDelimited(RemoteMessage.keyInject(code: code, direction: .endLong))
-        }
-    }
-
-    /// Two quick presses of the same key.
-    func doublePress(code: Int32) {
-        press(code: code)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.press(code: code)
-        }
-    }
-
     func press(code: Int32, meta: Int32 = 0) {
         if phase == .atv {
-            sendAtvKey(code)
+            if let code = Self.atvKey(for: code) { sendAtvKey(code) }
         } else {
             write(keyPacket(code: code, action: 0, meta: meta))
             write(keyPacket(code: code, action: 1, meta: meta))
