@@ -3,8 +3,10 @@ import { X509Certificate } from 'crypto';
 import { CLIENT_CERT, PAIRING_CODE, PAIRING_SECRET_HEX, PB, SERVER_CERT } from '@/atv/__fixtures__/vectors';
 import {
   ATV_PAIRING_PORT,
+  appLink,
   ATV_REMOTE_PORT,
   Direction,
+  hdmiInputLink,
   imeBatchEdit,
   keyInject,
   pairingConfiguration,
@@ -145,6 +147,11 @@ describe('RemoteClient', () => {
     remote.press('tvInput');
     remote.press('appSwitch');
     expect(sentMessages()).toEqual([delimited(keyInject(176, Direction.short))]);
+
+    // Inputs switch by app link.
+    mockNative.send.mockClear();
+    remote.openLink(hdmiInputLink(2));
+    expect(sentMessages()).toEqual([delimited(appLink(hdmiInputLink(2)))]);
 
     // Text goes in as an IME edit even before the TV has sent IME counters.
     mockNative.send.mockClear();

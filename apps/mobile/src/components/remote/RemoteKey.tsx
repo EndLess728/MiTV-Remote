@@ -6,7 +6,7 @@ import { Ionicons, type IoniconsIconName } from '@react-native-vector-icons/ioni
 import type { AndroidKeyName } from '@/milink/keys';
 import { ms } from '@/utils';
 
-import { useRemoteKey } from './useRemoteKey';
+import { tapFeedback, useRemoteKey } from './useRemoteKey';
 
 type Variant = 'default' | 'accent' | 'power';
 
@@ -20,6 +20,8 @@ interface RemoteKeyProps {
   style?: ViewStyle;
   /** Dimmed and inert, for keys the connected TV doesn't support. */
   disabled?: boolean;
+  /** Runs instead of sending the key (e.g. to open a picker). */
+  onPress?: () => void;
 }
 
 /** A round remote button that sends one Android key. */
@@ -32,6 +34,7 @@ export function RemoteKey({
   variant = 'default',
   style,
   disabled = false,
+  onPress,
 }: RemoteKeyProps): React.JSX.Element {
   const { theme } = useUnistyles();
   const handlers = useRemoteKey(keyName, repeat);
@@ -49,7 +52,14 @@ export function RemoteKey({
         disabled && styles.disabled,
         style,
       ]}
-      {...handlers}
+      {...(onPress
+        ? {
+            onPress: () => {
+              tapFeedback();
+              onPress();
+            },
+          }
+        : handlers)}
     >
       <Ionicons color={iconColor} name={icon} size={size * 0.42} />
     </Pressable>

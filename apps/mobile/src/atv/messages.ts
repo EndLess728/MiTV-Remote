@@ -154,6 +154,23 @@ export function keyInject(code: number, direction: number): Bytes {
 }
 
 /**
+ * Asks the TV to open a link (RemoteAppLinkLaunchRequest): a deep link, or a TV-input
+ * passthrough link (see `inputLink`). The service drops the connection on intent: links.
+ */
+export function appLink(link: string): Bytes {
+  return fieldMessage(90, fieldString(1, link));
+}
+
+/**
+ * Passthrough link that switches the TV to HDMI port `port`. The Android TV remote service has
+ * no input-source key (#6), but the TV's Live TV app switches inputs on these links. MediaTek-based
+ * Mi TVs name HDMI port n's input HW(n+3).
+ */
+export function hdmiInputLink(port: number): string {
+  return `content://android.media.tv/passthrough/com.mediatek.tvinput%2F.hdmi.HDMIInputService%2FHW${port + 3}`;
+}
+
+/**
  * Puts `text` into the focused text field on the TV, cursor after it. The counters echo the
  * TV's latest (0 before it has sent any), as the Google TV app and other clients do.
  */

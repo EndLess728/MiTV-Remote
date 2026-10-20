@@ -9,7 +9,9 @@ import {
 } from '../__fixtures__/vectors';
 import { certificate, rsaPublicKey, subjectPublicKeyInfo, tbsCertificate } from '../der';
 import {
+  appLink,
   Direction,
+  hdmiInputLink,
   imeBatchEdit,
   keyInject,
   normalizeCode,
@@ -143,6 +145,12 @@ describe('remote messages', () => {
     expect(remoteSetActive(615)).toEqual(PB.setActive615);
     expect(imeBatchEdit(3, 7, 'héllo')).toEqual(PB.imeHello);
     expect(remoteConfigure(615)).toEqual(PB.configure615);
+    expect(appLink('content://x')).toEqual([
+      210, 5, 13, 10, 11, 99, 111, 110, 116, 101, 110, 116, 58, 47, 47, 120,
+    ]);
+    expect(hdmiInputLink(1)).toBe(
+      'content://android.media.tv/passthrough/com.mediatek.tvinput%2F.hdmi.HDMIInputService%2FHW4',
+    );
   });
 
   it('parses incoming messages', () => {

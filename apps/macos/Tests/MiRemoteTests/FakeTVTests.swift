@@ -68,6 +68,13 @@ final class FakeTVTests: XCTestCase {
             ((try? String(contentsOfFile: keysFile, encoding: .utf8)) ?? "").contains("text 0 0 6 Hello!")
         }
 
+        // Links reach the TV as app-link launch requests.
+        client.openLink(InputSourceOption.hdmi1.link!)
+        try await waitUntil("the TV to receive the link", client: client) {
+            ((try? String(contentsOfFile: keysFile, encoding: .utf8)) ?? "")
+                .contains("link \(InputSourceOption.hdmi1.link!)")
+        }
+
         // Reconnecting reuses the pairing: straight to connected, no new code.
         client.disconnect()
         try? FileManager.default.removeItem(atPath: codeFile)

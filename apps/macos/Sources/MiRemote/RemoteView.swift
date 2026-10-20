@@ -20,6 +20,8 @@ struct RemoteView: View {
     @StateObject private var discovery = TVDiscovery()
     @AppStorage("tvHost") private var savedHost = ""
     @State private var showConnect = false
+    /// Over Android TV Remote there's no input-source key; this picker switches inputs by link.
+    @State private var showInputs = false
     @State private var text = ""
     @FocusState private var remoteFocused: Bool
     @FocusState private var textFocused: Bool
@@ -89,6 +91,15 @@ struct RemoteView: View {
                     .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Palette.bodyEdge))
                     .padding(14)
                 }
+            } else if showInputs {
+                ZStack {
+                    Color.black.opacity(0.55)
+                        .onTapGesture { showInputs = false }
+                    InputSourceSheet(client: client) { showInputs = false }
+                        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(Palette.body))
+                        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(Palette.bodyEdge))
+                        .padding(14)
+                }
             } else if client.state == .pairing {
                 // Android TVs without MiLink need a one-time code shown on the TV.
                 ZStack {
@@ -146,9 +157,8 @@ struct RemoteView: View {
         HStack {
             RoundKey(symbol: "power", tint: Palette.power, help: "Power (P)") { client.press(.power) }
             Spacer()
-            RoundKey(symbol: "rectangle.on.rectangle",
-                     help: client.tvProtocol == .atv ? "Input source (opens Settings: this TV has no input key over Wi-Fi)" : "Input source") {
-                client.press(.tvInput)
+            RoundKey(symbol: "rectangle.on.rectangle", help: "Input source") {
+                if client.tvProtocol == .atv { showInputs = true } else { client.press(.tvInput) }
             }
             Spacer()
             RoundKey(symbol: "square.stack",
@@ -249,7 +259,7 @@ struct RemoteView: View {
     // MARK: Keyboard
 
     private func handleKey(_ press: KeyPress) -> KeyPress.Result {
-        if textFocused || press.modifiers.contains(.command) || client.state == .pairing { return .ignored }
+        if textFocused || press.modifiers.contains(.command) || client.state == .pairing || showInputs { return .ignored }
         switch press.key {
         case .upArrow: client.press(.dpadUp)
         case .downArrow: client.press(.dpadDown)
@@ -637,3 +647,87 @@ struct PairSheet: View {
     }
 }
 
+
+// MARK: - Input source (Android TV Remote)
+
+/// Inputs reachable over the Android TV remote service, which has no input-source key (#6). The
+/// TV's Live TV app switches inputs on TV-input passthrough links, sent as app-link requests.
+/// Opening the input menu itself by link doesn't work: the service drops the connection on
+/// intent: links (tested on a MiTV-MOOR2).
+enum InputSourceOption: CaseIterable, Identifiable {
+    case hdmi1
+    case hdmi2
+    case hdmi3
+    case settings
+
+    var id: Self { self }
+
+    var title: String {
+        switch self {
+        case .hdmi1: return "HDMI 1"
+        case .hdmi2: return "HDMI 2"
+        case .hdmi3: return "HDMI 3"
+        case .settings: return "Settings"
+        }
+    }
+
+    /// The passthrough link for an HDMI input. MediaTek-based Mi TVs name HDMI port n's input
+    /// HW(n+3) in their TV input service. Nil for Settings, which is a key.
+    var link: String? {
+        switch self {
+        case .hdmi1: return Self.passthrough("HW4")
+        case .hdmi2: return Self.passthrough("HW5")
+        case .hdmi3: return Self.passthrough("HW6")
+        case .settings: return nil
+        }
+    }
+
+    private static func passthrough(_ hardwareId: String) -> String {
+        "content://android.media.tv/passthrough/com.mediatek.tvinput%2F.hdmi.HDMIInputService%2F\(hardwareId)"
+    }
+}
+
+/// Input picker for TVs on the Android TV remote service. Closes once an input is chosen.
+struct InputSourceSheet: View {
+    @ObservedObject var client: RemoteClient
+    var onClose: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Input source")
+                .font(.headline)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 3), spacing: 6) {
+                ForEach(InputSourceOption.allCases.filter { $0 != .settings }) { option in
+                    choice(option)
+                }
+            }
+            choice(.settings)
+            Text("Settings has the full list of inputs.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Spacer()
+                Button("Cancel", action: onClose)
+                    .keyboardShortcut(.cancelAction)
+            }
+        }
+        .padding(18)
+    }
+
+    private func choice(_ option: InputSourceOption) -> some View {
+        Button {
+            if let link = option.link {
+                client.openLink(link)
+            } else {
+                client.press(.settings)
+            }
+            onClose()
+        } label: {
+            Text(option.title)
+                .font(.system(size: 12, weight: .semibold))
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, minHeight: 32)
+        }
+        .buttonStyle(KeyStyle(shape: RoundedRectangle(cornerRadius: 8, style: .continuous), fill: Palette.key))
+    }
+}

@@ -610,6 +610,12 @@ final class RemoteClient: ObservableObject {
     /// Single press: DOWN followed by UP.
     func press(_ key: AndroidKey) { press(code: key.rawValue) }
 
+    /// Android TV Remote: asks the TV to open `link` (see `RemoteMessage.appLink`).
+    func openLink(_ link: String) {
+        guard state == .connected, phase == .atv else { return }
+        sendDelimited(RemoteMessage.appLink(link))
+    }
+
     func press(code: Int32, meta: Int32 = 0) {
         if phase == .atv {
             if let code = Self.atvKey(for: code) { sendAtvKey(code) }

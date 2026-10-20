@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 import { certificate, type RsaPublicKey, rsaPublicKey, tbsCertificate } from '@/atv/der';
 import {
+  appLink,
   ATV_PAIRING_PORT,
   ATV_REMOTE_PORT,
   Direction,
@@ -524,6 +525,12 @@ class RemoteClient {
   }
 
   // ── Keys ───────────────────────────────────────────────────
+
+  /** Android TV Remote: asks the TV to open `link` (see `appLink`). */
+  openLink(link: string): void {
+    if (!this.isConnected || this.phase !== 'atv') return;
+    this.sendDelimited(appLink(link));
+  }
 
   /** Single press: DOWN followed by UP. */
   press(key: AndroidKeyName): void {

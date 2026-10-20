@@ -212,6 +212,12 @@ enum RemoteMessage {
         Proto.bytes(10, Proto.int(1, Int64(code)) + Proto.int(2, direction.rawValue))
     }
 
+    /// Asks the TV to open a link (RemoteAppLinkLaunchRequest): a deep link, a TV-input link such
+    /// as content://android.media.tv/passthrough/<input id>, or possibly an intent: URI.
+    static func appLink(_ link: String) -> [UInt8] {
+        Proto.bytes(90, Proto.string(1, link))
+    }
+
     /// Puts `text` into the focused text field on the TV, cursor after it. The counters echo the
     /// TV's latest (0 before it has sent any), as the Google TV app and other clients do.
     static func imeBatchEdit(imeCounter: Int32, fieldCounter: Int32, text: String) -> [UInt8] {
