@@ -132,13 +132,15 @@ See [`apps/mobile/README.md`](apps/mobile/README.md) for the project layout and 
 
 ### CI and releases
 
-[`.github/workflows/build.yml`](.github/workflows/build.yml) builds all three apps on every push and pull request and attaches the DMG, APK and IPA to the workflow run. The macOS job first runs the Swift tests, including an end-to-end test against a stand-in Android TV ([`apps/macos/Tests/fake_tv.py`](apps/macos/Tests/fake_tv.py)): TLS 1.2 only, client certificates required, and the real pairing protocol. Pushing a version tag publishes a GitHub Release with all of them, plus a changelog:
+[`.github/workflows/build.yml`](.github/workflows/build.yml) builds all three apps on every push and pull request and attaches the DMG, APK and IPA to the workflow run. The macOS job first runs the Swift tests, including an end-to-end test against a stand-in Android TV ([`apps/macos/Tests/fake_tv.py`](apps/macos/Tests/fake_tv.py)): TLS 1.2 only, client certificates required, and the real pairing protocol. **Every push to `main`** (a merged pull request or a direct commit) publishes a GitHub Release with all three apps and a changelog. The version follows the commit messages since the last release ([Conventional Commits](https://www.conventionalcommits.org/)): a `feat` makes it a minor release (1.2.0 → 1.3.0), a `!` or `BREAKING CHANGE` a major one, and anything else a patch (1.2.0 → 1.2.1). Pull requests are built but not released.
+
+To pick the version yourself, push a tag instead:
 
 ```sh
 git tag v1.1.0 && git push origin v1.1.0
 ```
 
-Or, without a tag, run the workflow from **Actions → Build → Run workflow**, tick **release** and enter a version; it creates the tag itself. A version with a suffix, such as `1.2.0-alpha.1`, is published as a **pre-release**, so a feature branch can be tested before it's merged. Every release includes all three apps; for a quick Mac-only test build, tick **macos_only**.
+Or run the workflow from **Actions → Build → Run workflow**, tick **release** and enter a version; it creates the tag itself. A version with a suffix, such as `1.2.0-alpha.1`, is published as a **pre-release**, so a feature branch can be tested before it's merged. Every release includes all three apps; for a quick Mac-only test build, tick **macos_only**.
 
 No secrets are needed. The macOS app is ad-hoc signed, the APK uses the standard debug signing key, and the IPA is unsigned so that each person signs it with their own Apple ID.
 

@@ -4,7 +4,11 @@ name: Build
 #   macOS    apps/macos   universal .app → DMG + ZIP
 #   Android  apps/mobile  release APK (installable, signed with the debug key)
 #   iOS      apps/mobile  unsigned IPA, for sideloading with AltStore / SideStore / Sideloadly
-# A GitHub Release with the builds and a changelog is published when either:
+# A GitHub Release with all the builds and a changelog is published when:
+#   - anything lands on main (a merged PR or a direct commit). The version is the last release
+#     bumped by the commits since it (Conventional Commits): "feat" → minor, a "!" or
+#     "BREAKING CHANGE" → major, anything else → patch. A commit that already has a release tag
+#     is skipped.
 #   - a v* tag is pushed, or
 #   - the workflow is run manually (Actions → Build → Run workflow) with "release" ticked;
 #     it then creates the v<version> tag on that commit itself.
@@ -45,8 +49,13 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       app-version: ${{ steps.v.outputs.app-version }}
       prerelease: ${{ steps.v.outputs.prerelease }}
+      release: ${{ steps.v.outputs.release }}
       mobile: ${{ !inputs.macos_only }}
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # all history and tags, to work out the next version
+
       - id: v
         env:
           EVENT: ${{ github.event_name }}
@@ -58,6 +67,24 @@ jobs:
             VERSION="${GITHUB_REF_NAME#v}"
           elif [[ "$EVENT" == "workflow_dispatch" && "$RELEASE" == "true" ]]; then
             VERSION="$INPUT_VERSION"
+          elif [[ "$EVENT" == "push" && "$GITHUB_REF" == refs/heads/main ]]; then
+            if git tag --points-at HEAD | grep -qE '^v[0-9]'; then
+              echo "This commit already has a release ($(git tag --points-at HEAD | tr '\n' ' ')), skipping."
+            else
+              # Last stable release reachable from here (pre-releases like 1.2.0-alpha.1 don't count).
+              LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude 'v*-*' HEAD 2>/dev/null || echo v0.0.0)
+              RANGE=$([[ "$LAST" == v0.0.0 ]] && echo HEAD || echo "$LAST..HEAD")
+              LOG=$(git log --format='%s%n%b' "$RANGE")
+              IFS=. read -r MAJOR MINOR PATCH <<< "${LAST#v}"
+              if grep -qE '^[a-z]+(\([^)]*\))?!:|^BREAKING[ -]CHANGE' <<< "$LOG"; then
+                VERSION="$((MAJOR + 1)).0.0"
+              elif grep -qE '^feat(\([^)]*\))?:' <<< "$LOG"; then
+                VERSION="$MAJOR.$((MINOR + 1)).0"
+              else
+                VERSION="$MAJOR.$MINOR.$((PATCH + 1))"
+              fi
+              echo "Last release $LAST → releasing $VERSION"
+            fi
           fi
           if [[ -n "$VERSION" ]]; then
             if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$ ]]; then
@@ -68,7 +95,9 @@ jobs:
             # iOS needs a purely numeric version, so the app itself gets 1.2.0 for 1.2.0-alpha.1.
             echo "app-version=${VERSION%%-*}" >> "$GITHUB_OUTPUT"
             [[ "$VERSION" == *-* ]] && echo "prerelease=true" >> "$GITHUB_OUTPUT" || echo "prerelease=false" >> "$GITHUB_OUTPUT"
+            echo "release=true" >> "$GITHUB_OUTPUT"
           else
+            echo "release=false" >> "$GITHUB_OUTPUT"
             echo "version=0.0.0-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
             # iOS requires a numeric version, so untagged builds keep package.json's.
             echo "app-version=" >> "$GITHUB_OUTPUT"
@@ -282,7 +311,7 @@ jobs:
     # Mobile jobs may be skipped (macos_only); everything that ran must have succeeded.
     if: >-
       !cancelled() && !failure()
-      && (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.release))
+      && needs.version.outputs.release == 'true'
     needs: [version, macos, android, ios]
     runs-on: ubuntu-latest
     env:
@@ -302,7 +331,9 @@ jobs:
       # Uses the commit SHA (not the tag) so it also works on a manual run, before the tag exists.
       - name: Write release notes
         run: |
-          PREV=$(git describe --tags --abbrev=0 "$GITHUB_SHA^" 2>/dev/null || true)
+          # A stable release's changelog runs from the previous stable release (skipping alphas).
+          EXCLUDE=$([[ "$PRERELEASE" == "true" ]] && echo "" || echo "--exclude=v*-*")
+          PREV=$(git describe --tags --abbrev=0 --match 'v[0-9]*' $EXCLUDE "$GITHUB_SHA^" 2>/dev/null || true)
           RANGE=${PREV:+$PREV..}$GITHUB_SHA
           {
             if [[ "$PRERELEASE" == "true" ]]; then
