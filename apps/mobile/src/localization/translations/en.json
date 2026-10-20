@@ -34,7 +34,8 @@
     "next": "Next",
     "type_placeholder": "Type on TV…",
     "send_text": "Send text",
-    "delete": "Delete"
+    "delete": "Delete",
+    "pairing": "Pairing with {{host}}…"
   },
   "connect": {
     "title": "Connect to Mi TV",
@@ -59,5 +60,19 @@
     "title": "Oops!",
     "message": "This screen doesn't exist.",
     "go_home": "Go to the remote"
+  },
+  "pair": {
+    "title": "Pair with your TV",
+    "intro": "This TV ({{host}}) doesn't have Xiaomi's MiLink service, so Mi Remote uses the Android TV remote service instead. That needs a one-time pairing.",
+    "requesting": "Asking the TV for a pairing code…",
+    "enter_code": "Enter the 6-character code shown on your TV",
+    "pair": "Pair",
+    "retry": "Try again",
+    "cancel": "Cancel pairing",
+    "error_wrong_code": "That code didn't work. Enter the code now shown on the TV.",
+    "error_rejected": "The TV didn't accept the pairing. Try again, and enter the code before it disappears from the TV.",
+    "error_connection": "Lost the connection to the TV while pairing.",
+    "error_certificate": "Couldn't create the pairing key on this phone.",
+    "hint": "You only need to do this once per TV. If it keeps failing, on the TV open Settings → Apps → See all apps → Show system apps → Android TV Remote Service, and clear its storage."
   }
 }

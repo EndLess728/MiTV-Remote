@@ -1,11 +1,15 @@
 import ExpoModulesCore
 import Network
 
-/// Raw TCP socket and Mi TV discovery for the MiLink remote protocol.
-/// Framing and key packets live in TypeScript (src/milink); this module only moves bytes.
+/// Raw TCP/TLS socket and Mi TV discovery for the remote protocols.
+/// Framing and packets live in TypeScript (src/milink, src/atv); this module only moves bytes,
+/// plus the client key and TLS that the Android TV Remote protocol needs.
 public class MiLinkModule: Module {
   private let queue = DispatchQueue(label: "expo.modules.milink")
   private var connection: NWConnection?
+  /// Whether the current connection got past TCP (so a failure means the service exists).
+  private var reachedPeer = false
+  private var peerCertificate: Data?
   private var browser: NWBrowser?
   private var resolvers: [String: NWConnection] = [:]
   private var reported: Set<String> = []
@@ -15,8 +19,24 @@ public class MiLinkModule: Module {
 
     Events("onSocketState", "onSocketData", "onTvFound")
 
-    Function("connect") { (host: String, port: Int) in
-      self.queue.async { self.open(host: host, port: port) }
+    Function("connect") { (host: String, port: Int, tls: Bool) in
+      self.queue.async { self.open(host: host, port: port, tls: tls) }
+    }
+
+    AsyncFunction("clientKey") { () throws -> [String: Any] in
+      var result: [String: Any] = ["publicKey": try ClientIdentity.publicKey().map { Int($0) }]
+      if let cert = ClientIdentity.certificate() {
+        result["certificate"] = cert.map { Int($0) }
+      }
+      return result
+    }
+
+    AsyncFunction("signWithClientKey") { (data: [Int]) throws -> [Int] in
+      try ClientIdentity.sign(Data(data.map { UInt8(truncatingIfNeeded: $0) })).map { Int($0) }
+    }
+
+    AsyncFunction("setClientCertificate") { (der: [Int]) throws in
+      try ClientIdentity.setCertificate(Data(der.map { UInt8(truncatingIfNeeded: $0) }))
     }
 
     Function("disconnect") {
@@ -48,21 +68,28 @@ public class MiLinkModule: Module {
 
   // MARK: - Socket
 
-  private func open(host: String, port: Int) {
+  private func open(host: String, port: Int, tls: Bool) {
     close()
     guard let nwPort = NWEndpoint.Port(rawValue: UInt16(clamping: port)) else { return }
     let tcp = NWProtocolTCP.Options()
     tcp.noDelay = true
     tcp.connectionTimeout = 4
     tcp.enableKeepalive = true
-    let conn = NWConnection(host: NWEndpoint.Host(host), port: nwPort, using: NWParameters(tls: nil, tcp: tcp))
+    reachedPeer = false
+    peerCertificate = nil
+    let conn = NWConnection(
+      host: NWEndpoint.Host(host),
+      port: nwPort,
+      using: NWParameters(tls: tls ? tlsOptions() : nil, tcp: tcp)
+    )
     connection = conn
     emitState("connecting")
     conn.stateUpdateHandler = { [weak self, weak conn] state in
       guard let self, let conn, conn === self.connection else { return }
       switch state {
       case .ready:
-        self.emitState("connected")
+        self.reachedPeer = true
+        self.emitState("connected", peerCertificate: self.peerCertificate)
         self.receive(on: conn)
       case .waiting(let error), .failed(let error):
         // .waiting covers "no route" and a denied Local Network permission; report it as a
@@ -70,12 +97,33 @@ public class MiLinkModule: Module {
         self.connection = nil
         conn.stateUpdateHandler = nil
         conn.cancel()
-        self.emitState("failed", error: error.localizedDescription)
+        var reachable = self.reachedPeer
+        if case .tls = error { reachable = true }
+        self.emitState("failed", error: error.localizedDescription, reachable: reachable)
       default:
         break
       }
     }
     conn.start(queue: queue)
+  }
+
+  /// Presents the client certificate and accepts the TV's self-signed one. The pairing secret
+  /// mixes in the TV's public key, which is what ties the session to the right TV.
+  private func tlsOptions() -> NWProtocolTLS.Options {
+    let options = NWProtocolTLS.Options()
+    let sec = options.securityProtocolOptions
+    sec_protocol_options_set_min_tls_protocol_version(sec, .TLSv12)
+    if let identity = ClientIdentity.identity(), let secIdentity = sec_identity_create(identity) {
+      sec_protocol_options_set_local_identity(sec, secIdentity)
+    }
+    sec_protocol_options_set_verify_block(sec, { [weak self] _, trust, complete in
+      let secTrust = sec_trust_copy_ref(trust).takeRetainedValue()
+      if let chain = SecTrustCopyCertificateChain(secTrust) as? [SecCertificate], let leaf = chain.first {
+        self?.peerCertificate = SecCertificateCopyData(leaf) as Data
+      }
+      complete(true)
+    }, queue)
+    return options
   }
 
   private func receive(on conn: NWConnection) {
@@ -88,7 +136,7 @@ public class MiLinkModule: Module {
         self.connection = nil
         conn.stateUpdateHandler = nil
         conn.cancel()
-        self.emitState("failed", error: error?.localizedDescription ?? "TV closed the connection")
+        self.emitState("failed", error: error?.localizedDescription ?? "TV closed the connection", reachable: true)
       } else {
         self.receive(on: conn)
       }
@@ -103,9 +151,11 @@ public class MiLinkModule: Module {
     emitState("disconnected")
   }
 
-  private func emitState(_ state: String, error: String? = nil) {
+  private func emitState(_ state: String, error: String? = nil, reachable: Bool? = nil, peerCertificate: Data? = nil) {
     var body: [String: Any] = ["state": state]
     if let error { body["error"] = error }
+    if let reachable { body["reachable"] = reachable }
+    if let peerCertificate { body["peerCertificate"] = peerCertificate.map { Int($0) } }
     sendEvent("onSocketState", body)
   }
 

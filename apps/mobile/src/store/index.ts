@@ -1,5 +1,6 @@
 import { useSettingsStore } from './useSettingsStore';
 
+export type { TvProtocol } from './useSettingsStore';
 export { useSettingsStore } from './useSettingsStore';
 
 /**

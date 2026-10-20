@@ -16,7 +16,7 @@ import MiLink, { type FoundTV } from 'milink';
 
 import { tapFeedback } from '@/components/remote/useRemoteKey';
 import { useTranslate } from '@/localization/utils';
-import { milink, useConnectionStore } from '@/milink/client';
+import { remote, useConnectionStore } from '@/remote/client';
 import { useSettingsStore } from '@/store';
 import { TextStyles } from '@/theme';
 import { ms } from '@/utils';
@@ -73,7 +73,7 @@ export default function ConnectScreen(): React.JSX.Element {
     (host: string) => {
       tapFeedback();
       setTvHost(host);
-      milink.connect(host);
+      remote.connect(host);
       router.back();
     },
     [setTvHost],
@@ -189,7 +189,7 @@ export default function ConnectScreen(): React.JSX.Element {
           accessibilityRole="button"
           style={styles.disconnect}
           onPress={() => {
-            milink.disconnect();
+            remote.disconnect();
             router.back();
           }}
         >
