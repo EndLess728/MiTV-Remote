@@ -281,7 +281,9 @@ jobs:
             echo
             echo "## First launch"
             echo
-            echo "- **macOS**: the app is not notarized. Open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**."
+            if [[ "$PRERELEASE" != "true" ]]; then
+              echo "- **macOS**: the app is not notarized. Open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**."
+            fi
             echo "- **All platforms**: allow **Local Network** access when asked; the app needs it to find and reach the TV."
             echo "- **Mi TVs without MiLink** (newer Android TV / Google TV models): the phone apps connect through the Android TV remote service instead. The first time, the TV shows a 6-character code; type it into the app."
             echo "- **iPhone**: apps sideloaded with a free Apple ID expire after 7 days; refresh them in AltStore/SideStore, or reinstall."
