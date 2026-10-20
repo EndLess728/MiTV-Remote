@@ -96,7 +96,17 @@ jobs:
         env:
           MIREMOTE_FAKE_TV_CODE: ${{ runner.temp }}/tv-code
           MIREMOTE_FAKE_TV_KEYS: ${{ runner.temp }}/tv-keys
-        run: swift test
+        run: |
+          set +e
+          swift test 2>&1 | tee "$RUNNER_TEMP/swift-test.log"
+          status=${PIPESTATUS[0]}
+          if [[ $status != 0 ]]; then
+            # Surface failures as annotations, readable without the raw log.
+            enc() { python -c 'import sys; print(sys.stdin.read()[-6000:].replace("%","%25").replace("\r","").replace("\n","%0A"))'; }
+            echo "::error title=swift test failures::$(grep -E 'error:|failed|Timed out|XCTAssert|fatal' "$RUNNER_TEMP/swift-test.log" | head -40 | enc)"
+            echo "::error title=fake TV log::$(tail -60 "$RUNNER_TEMP/fake-tv.log" | enc)"
+          fi
+          exit $status
 
       - name: Fake TV log
         if: always()
