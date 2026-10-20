@@ -8,8 +8,8 @@ name: Build
 #   - a v* tag is pushed, or
 #   - the workflow is run manually (Actions → Build → Run workflow) with "release" ticked;
 #     it then creates the v<version> tag on that commit itself.
-# A version with a suffix (1.2.0-alpha.1, 1.2.0-beta.2) is published as a pre-release with
-# only the mobile builds, for testing from a feature branch before it is merged.
+# A version with a suffix (1.2.0-alpha.1, 1.2.0-beta.2) is published as a pre-release, for
+# testing from a feature branch before it is merged.
 
 on:
   push:
@@ -78,6 +78,9 @@ jobs:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Run unit tests
+        run: swift test
 
       - name: Build universal app
         run: UNIVERSAL=1 ./build-app.sh
@@ -253,11 +256,6 @@ jobs:
           path: out
           merge-multiple: true
 
-      # Pre-releases test mobile changes only; the macOS build stays on the last stable release.
-      - name: Drop desktop builds from a pre-release
-        if: needs.version.outputs.prerelease == 'true'
-        run: rm -f out/*macOS*
-
       # Uses the commit SHA (not the tag) so it also works on a manual run, before the tag exists.
       - name: Write release notes
         run: |
@@ -273,19 +271,16 @@ jobs:
             echo
             echo "| Platform | File | How to install |"
             echo "|---|---|---|"
-            if [[ "$PRERELEASE" != "true" ]]; then
-              echo "| macOS 14+ | \`Mi-Remote-$VERSION-macOS.dmg\` | Open it and drag **Mi Remote** to Applications |"
-            fi
+            echo "| macOS 14+ | \`Mi-Remote-$VERSION-macOS.dmg\` | Open it and drag **Mi Remote** to Applications |"
             echo "| Android 7+ | \`Mi-Remote-$VERSION-android.apk\` | Open it on the phone and allow installing from this source |"
             echo "| iPhone (iOS 16.4+) | \`Mi-Remote-$VERSION-ios-unsigned.ipa\` | Sideload with AltStore, SideStore or Sideloadly using your Apple ID |"
             echo
             echo "## First launch"
             echo
-            if [[ "$PRERELEASE" != "true" ]]; then
-              echo "- **macOS**: the app is not notarized. Open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**."
-            fi
+            echo "- **macOS**: the app is not notarized. Open it once, then go to **System Settings → Privacy & Security** and click **Open Anyway**."
+            echo "- **macOS, after updating**: if the app asks to use its key in your keychain, click **Always Allow**. That key is what the TV paired with."
             echo "- **All platforms**: allow **Local Network** access when asked; the app needs it to find and reach the TV."
-            echo "- **Mi TVs without MiLink** (newer Android TV / Google TV models): the phone apps connect through the Android TV remote service instead. The first time, the TV shows a 6-character code; type it into the app."
+            echo "- **Mi TVs without MiLink** (newer Android TV / Google TV models): the apps connect through the Android TV remote service instead. The first time, the TV shows a 6-character code; type it into the app."
             echo "- **iPhone**: apps sideloaded with a free Apple ID expire after 7 days; refresh them in AltStore/SideStore, or reinstall."
             echo
             echo "See the [README](https://github.com/$GITHUB_REPOSITORY#install) for step-by-step instructions."
