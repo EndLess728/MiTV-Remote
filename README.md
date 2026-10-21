@@ -10,6 +10,8 @@ MiLink's protocol isn't documented, so it was **reverse engineered with [REA (Re
 
 > Not affiliated with or endorsed by Xiaomi. "Mi" and "Xiaomi" are trademarks of their respective owners.
 
+[![Featured on Made with REA](https://madewithrea.com/badges/featured.svg)](https://madewithrea.com/builds/mi-tv-remote-xiaomi-milink-protocol-reverse-engineered-with-rea)
+
 ## Apps
 
 | App | Folder | Built with | Output |
