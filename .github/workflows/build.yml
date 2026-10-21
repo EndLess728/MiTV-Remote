@@ -7,8 +7,8 @@ name: Build
 # A GitHub Release with all the builds and a changelog is published when:
 #   - anything lands on main (a merged PR or a direct commit). The version is the last release
 #     bumped by the commits since it (Conventional Commits): "feat" → minor, "type!:" or a
-#     "BREAKING CHANGE:" footer → major, anything else → patch. A commit that already has a release tag
-#     is skipped.
+#     "BREAKING CHANGE:" footer → major, anything else → patch. Pushes that only change docs
+#     (Markdown files, docs/) don't release. A commit that already has a release tag
 #   - a v* tag is pushed, or
 #   - the workflow is run manually (Actions → Build → Run workflow) with "release" ticked;
 #     it then creates the v<version> tag on that commit itself.
@@ -74,6 +74,15 @@ jobs:
               # Last stable release reachable from here (pre-releases like 1.2.0-alpha.1 don't count).
               LAST=$(git describe --tags --abbrev=0 --match 'v[0-9]*' --exclude 'v*-*' HEAD 2>/dev/null || echo v0.0.0)
               RANGE=$([[ "$LAST" == v0.0.0 ]] && echo HEAD || echo "$LAST..HEAD")
+            fi
+            # Documentation-only changes (Markdown files, docs/) don't make a release; they ship
+            # with the next release that changes anything else.
+            if [[ -n "${RANGE:-}" ]] && [[ "$LAST" != v0.0.0 ]] \
+               && ! git diff --name-only "$LAST" HEAD | grep -qvE '(\.md$|^docs/)'; then
+              echo "Only documentation changed since $LAST, so no release."
+              RANGE=""
+            fi
+            if [[ -n "${RANGE:-}" ]]; then
               SUBJECTS=$(git log --format='%s' "$RANGE")
               BODIES=$(git log --format='%b' "$RANGE")
               IFS=. read -r MAJOR MINOR PATCH <<< "${LAST#v}"
