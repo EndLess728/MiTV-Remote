@@ -52,7 +52,12 @@ final class TVDiscovery: ObservableObject {
                 model = txt["md"] ?? ""
                 friendly = txt["fn"] ?? name
             }
-            guard model.lowercased().hasPrefix("mitv") || name.lowercased().hasPrefix("mitv") else { continue }
+            // Mi TVs ("MiTV-…") and Mi Boxes ("MIBOX4"), which run MiLink too.
+            let isXiaomi = [model, name].contains { id in
+                let id = id.lowercased()
+                return id.hasPrefix("mitv") || id.hasPrefix("mibox")
+            }
+            guard isXiaomi else { continue }
             guard resolvers[name] == nil, !tvs.contains(where: { $0.id == name }) else { continue }
             resolve(result.endpoint, id: name, name: friendly, model: model)
         }
