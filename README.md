@@ -41,6 +41,7 @@ All three implement the same protocols and features:
 |---|---|
 | **Xiaomi Mi TV `MiTV-AXSO0`** (Android TV 9, PatchWall) | ✅ Tested with the macOS app. The mobile apps use the same protocol and have so far been tested against a mock TV |
 | **Xiaomi Mi TV `MiTV-MOOR2`** (Android TV 11, no MiLink) | ✅ Tested with the macOS app, through the Android TV remote service ([#4](https://github.com/EndLess728/MiTV-Remote/issues/4)): pairing, navigation, volume, media keys, typing and switching HDMI inputs work. Recent apps isn't available |
+| **Xiaomi Mi Box S `MIBOX4`** (Android TV) | ✅ Tested with the macOS app, through MiLink: found on the network and controlled with no pairing |
 | Other Mi TVs on Android TV with PatchWall | Expected to work, not tested |
 | Xiaomi TVs on Google TV | Expected to work through the Android TV remote service, not tested |
 
@@ -173,7 +174,7 @@ Implementation notes:
 - **`downTime` and `eventTime` must be 0.** The TV then stamps the event with its own uptime clock. Sending the device's clock puts events "in the future" on the TV and can stall its input dispatcher until that time arrives. This was the hardest bug to find.
 - **Holding a key**: the TV releases a key on its own about 175 ms after the last DOWN, so held buttons resend DOWN every 100 ms with an increasing `repeatCount`, then send UP.
 - **Text**: MiLink has no text packet, so typing maps each character to an Android key code (plus Shift) and sends it as a keystroke.
-- **Discovery**: Mi TVs advertise `_googlecast._tcp` with a TXT `md=MiTV-…` model, which the apps browse and resolve to an IPv4 address.
+- **Discovery**: Mi TVs advertise `_googlecast._tcp` with a TXT `md=MiTV-…` model (Mi Boxes use `md=MIBOX…`), which the apps browse and resolve to an IPv4 address.
 
 ### Android TV Remote
 

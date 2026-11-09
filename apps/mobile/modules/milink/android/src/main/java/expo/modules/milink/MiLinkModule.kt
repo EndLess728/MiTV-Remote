@@ -274,7 +274,11 @@ class MiLinkModule : Module() {
     val attrs = info.attributes ?: emptyMap()
     val model = attrs["md"]?.toString(Charsets.UTF_8) ?: ""
     val friendly = attrs["fn"]?.toString(Charsets.UTF_8) ?: name
-    if (!model.lowercase().startsWith("mitv") && !name.lowercase().startsWith("mitv")) return
+    // Mi TVs ("MiTV-…") and Mi Boxes ("MIBOX4"), which run MiLink too.
+    val isXiaomi = listOf(model, name).any { id ->
+      id.lowercase().let { it.startsWith("mitv") || it.startsWith("mibox") }
+    }
+    if (!isXiaomi) return
     // Android 14+ can resolve several addresses; the TV listens on IPv4.
     val host = if (Build.VERSION.SDK_INT >= 34) {
       info.hostAddresses.filterIsInstance<Inet4Address>().firstOrNull()
